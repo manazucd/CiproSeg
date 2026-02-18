@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ciproseg"
+version = "0.1.0"
+description = "CiproSeg: LOSO U-Net segmentation framework (single-GPU, research-grade)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+
+authors = [
+  { name = "Manaz Kaleel", email = "manaz.ucd@gmail.com" },
+  { name = "Team NexoraLab" }
+]
+
+dependencies = [
+  "torch>=2.2",
+  "numpy>=1.23",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+  "opencv-python>=4.8",
+  "tifffile>=2023.7.0",
+  "matplotlib>=3.7.0",
+  "imagecodecs>=2023.7.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "ruff>=0.4",
+  "mypy>=1.5"
+]
+
+[project.urls]
+Homepage = "https://github.com/manazucd/CiproSeg"
+Repository = "https://github.com/manazucd/CiproSeg"
+Issues = "https://github.com/manazucd/CiproSeg/issues"
+
+[project.scripts]
+ciproseg-train = "ciproseg.cli.train_cli:main"
+ciproseg-eval  = "ciproseg.cli.eval_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true

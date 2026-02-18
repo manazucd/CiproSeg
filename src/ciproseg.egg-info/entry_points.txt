@@ -1,0 +1,3 @@
+[console_scripts]
+ciproseg-eval = ciproseg.cli.eval_cli:main
+ciproseg-train = ciproseg.cli.train_cli:main
