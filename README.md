@@ -77,6 +77,97 @@ ciproseg-train --config path/to/config.yaml
 ciproseg-eval --config path/to/config.yaml --checkpoint path/to/checkpoint.pth
 ```
 
+### CiproSeg Inference Guide
+CiproSeg provides a command-line interface for running tiled full-image inference on a directory of microscopy images.
+
+The model performs **pixel-wise semantic segmentation**, predicting for each pixel the probability that it belongs to a bacterial cell (foreground) versus background.
+
+## Basic Inference (Prediction Only)
+
+Run inference on a directory of images:
+
+``` bash
+ciproseg-infer \
+  --ckpt runs/ciproseg_ecoli_unet/fold_01/best.pt \
+  --input Data/miniture_4_debug/images/controlnonsilica/
+```
+
+This will:
+  - Load the trained checkpoint
+  - Run tiled inference on all images in the input directory
+  - Create an output directory next to the input folder
+  - Generate prediction artefacts for each image
+
+## Inference with Ground Truth (Evaluation Visualisation)
+
+If ground-truth masks are available, provide the `--masks` directory:
+
+``` bash
+ciproseg-infer \
+  --ckpt runs/ciproseg_ecoli_unet/fold_01/best.pt \
+  --input Data/miniture_4_debug/images/controlnonsilica/ \
+  --masks Data/miniture_4_debug/masks/controlnonsilica/ \
+  --output /data/predictions/ \
+  --threshold 0.45 \
+  --patch 512 --stride 256
+```
+
+> **Important:**\
+> Ground-truth mask filenames must match image filenames (same stem).
+
+Example:
+    images/controlnonsilica/01.tif
+    masks/controlnonsilica/01.tif
+
+# Generated Output Files
+For each input image `01.tif`, the following PNG files are created:
+
+## 1 `01_prob.png` --- Probability Map (16-bit)
+
+Represents the raw model output after sigmoid activation.
+-   Pixel-wise probability in range `[0, 1]`
+-   Stored as 16-bit PNG for precision
+
+Interpretation:
+-   Dark -> high confidence background
+-   Bright -> high confidence cell
+-   Mid-gray -> uncertain region
+
+## 2 `01_binary.png` --- Binary Segmentation Mask
+
+Thresholded probability map.
+-   255 -> Cell (foreground)
+-   0 -> Background
+
+This is the final segmentation used for quantitative analysis.
+
+## 3 `01_pred_overlay.png` --- Prediction Boundary Overlay
+-   Original grayscale microscopy image
+-   Predicted cell boundaries drawn in **green**
+
+The model predicts full cell regions. Only the contour (outline) is drawn so that biological texture remains
+visible.
+
+## 4 `01_gt_overlay.png` *(only if `--masks` provided)*
+-   Original image
+-   Ground-truth boundaries drawn in **cyan**
+
+## 5 `01_diff.png` *(only if `--masks` provided)*
+
+Color coded comparison between prediction and ground truth:
+  - Green -> True Positive (correct cell pixel)
+  - Red -> False Positive (model over segmentation)
+  - Blue -> False Negative (model missed cell pixel)
+  - Dark -> True Negative (correct background)
+
+This is useful for diagnosing model behavior.
+
+# Notes
+  - Inference is tiled internally to support large images.
+  - Images smaller than patch size are automatically padded.
+  - Non divisible dimensions are handled via overlap averaging.
+  - Output files are written atomically for robustness.
+
 ## Common Installation Issues
 
 ### Issue: CUDA not available

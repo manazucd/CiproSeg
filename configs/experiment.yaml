@@ -5,7 +5,7 @@ dataset:
   name: ciproseg_ecoli
   root: "/home/manaz/git-projects/CiproSeg/Data/miniture_4_debug"
   train_frac: 0.8
-  patch: 64
+  patch: 256
   stride: 128
 
 model:
@@ -15,7 +15,7 @@ model:
   base_channels: 64
 
 trainer:
-  epochs: 30
+  epochs: 30000
   batch_size: 2
   num_workers: 0
   seed: 1234

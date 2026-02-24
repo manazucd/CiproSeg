@@ -17,7 +17,7 @@ authors = [
 
 dependencies = [
   "torch>=2.2",
-  "numpy>=1.23",
+  "numpy=>=1.23,<2.3",
   "pyyaml>=6.0",
   "tqdm>=4.66",
   "opencv-python>=4.8",
@@ -41,6 +41,7 @@ Issues = "https://github.com/manazucd/CiproSeg/issues"
 [project.scripts]
 ciproseg-train = "ciproseg.cli.train_cli:main"
 ciproseg-eval  = "ciproseg.cli.eval_cli:main"
+ciproseg-infer = "ciproseg.cli.infer_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
