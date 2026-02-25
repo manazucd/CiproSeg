@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-02-25, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -143,13 +144,53 @@ def _x_label(xs: List[float]) -> str:
     return "epoch" if all(abs(x - round(x)) < 1e-9 for x in xs) else "step"
 
 
-
 def _first_xs_for_metric(folds: Sequence[FoldCurves], metric: str) -> List[float]:
     for fc in folds:
         c = fc.curves.get(metric)
         if c and c.x:
             return c.x
     return [1.0]
+
+def _annotate_best_point(
+    ax,
+    curve: Curve,
+    *,
+    mode: str,
+    label: str,
+    decimals: int = 5,
+) -> None:
+    """
+    Annotate the best point on a curve with a dot and a text label.
+
+    mode:
+      - "min" for losses
+      - "max" for scores (dice/iou)
+    """
+    if not curve.x or not curve.y:
+        return
+
+    if len(curve.x) != len(curve.y):
+        # Defensive: avoid confusing annotations if data malformed
+        return
+
+    best_idx = min(range(len(curve.y)), key=lambda i: curve.y[i]) if mode == "min" \
+        else max(range(len(curve.y)), key=lambda i: curve.y[i])
+
+    bx = float(curve.x[best_idx])
+    by = float(curve.y[best_idx])
+
+    ax.scatter([bx], [by], marker="o", s=40, zorder=5)
+
+    txt = f"{by:.{decimals}f}, {int(round(bx)) if abs(bx-round(bx))<1e-9 else bx}"
+    ax.annotate(
+        txt,
+        xy=(bx, by),
+        xytext=(8, 8),
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
+        fontsize=8,
+    )
 
 
 def plot_fold_curves(
@@ -159,28 +200,43 @@ def plot_fold_curves(
     title: Optional[str] = None,
     show: bool = True,
     savepath: Optional[str] = None,
+    annotate_best: bool = True,
 ) -> None:
     """Plots selected metrics for a single fold."""
     present = [m for m in metrics if m in fold_curves.curves]
     if not present:
-        raise ValueError(f"No requested metrics found for {fold_curves.fold_name}. "
-                         f"Available={list(fold_curves.curves)}")
+        raise ValueError(
+            f"No requested metrics found for {fold_curves.fold_name}. "
+            f"Available={list(fold_curves.curves)}"
+        )
+    fig, ax = plt.subplots()
 
-    plt.figure()
     for m in present:
         c = fold_curves.curves[m]
-        plt.plot(c.x, c.y, label=m)
+        ax.plot(c.x, c.y, label=m)
 
-    plt.xlabel(_x_label(fold_curves.curves[present[0]].x))
-    plt.ylabel("value")
-    plt.title(title or fold_curves.fold_name)
-    plt.legend()
-    plt.tight_layout()
+    if annotate_best:
+        for m in ("train_loss", "val_loss"):
+            if m in fold_curves.curves and m in present:
+                _annotate_best_point(ax, fold_curves.curves[m], mode="min", label=m, decimals=5)
+
+        for m in ("val_dice", "val_iou"):
+            if m in fold_curves.curves and m in present:
+                _annotate_best_point(ax, fold_curves.curves[m], mode="max", label=m, decimals=4)
+
+    ax.set_xlabel(_x_label(fold_curves.curves[present[0]].x))
+    ax.set_ylabel("value")
+    ax.set_title(title or fold_curves.fold_name)
+    ax.legend()
+    fig.tight_layout()
 
     if savepath:
-        _ensure_dir(savepath)
-        plt.savefig(savepath, dpi=150)
-    plt.show() if show else plt.close()
+        Path(savepath).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(savepath, dpi=150)
+
+    if show:
+        plt.show()
+    plt.close(fig)
 
 
 def plot_metric_across_folds(
