@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-02-25, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-import torch
+import torch, gc
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -105,6 +105,9 @@ class Trainer:
         self.fold_results = []
 
         for fold_id, (test_s, train_s) in enumerate(folds, start=1):
+            torch.cuda.empty_cache()
+            gc.collect()
+
             fold_name = f"fold{fold_id:02d}_test_{test_s}"
             fold_seed = self.seed + 1000 * fold_id
 
@@ -210,31 +213,61 @@ class Trainer:
                 if sched_bundle is not None and sched_bundle.interval == "epoch":
                     sched_bundle.scheduler.step()
 
-                val_metrics = evaluate_series_full(
-                    model,
-                    val_frames,
-                    patch=self.patch,
-                    stride=self.stride,
-                    device=self.device,
-                    thr=self.thr,
-                    compute_loss=True,
-                )
-                val_dice = float(val_metrics["dice"])
-
                 state["train_loss"] = running_loss / max(1, len(train_loader))
-                state["val_metrics"] = val_metrics
                 state["lr"] = float(opt.param_groups[0].get("lr", 0.0))
 
-                train_loss_ep = float(state["train_loss"])
-                val_loss_ep = _extract_val_loss(val_metrics)
-
-                loss_epochs.append(ep)
-                loss_train.append(train_loss_ep)
-                loss_val.append(val_loss_ep)
-                dice_epochs.append(ep)
-                dice_val.append(val_dice)
-                
                 if (ep % 10 == 0) or (ep == self.epochs):
+
+                    with torch.inference_mode():
+                        val_metrics = evaluate_series_full(
+                            model,
+                            val_frames,
+                            patch=self.patch,
+                            stride=self.patch,
+                            device=self.device,
+                            thr=self.thr,
+                            compute_loss=True,
+                        )
+                    torch.cuda.empty_cache()
+                    gc.collect()
+
+                    val_dice = float(val_metrics["dice"])
+                    state["val_metrics"] = val_metrics
+
+                    loss_epochs.append(ep)
+                    loss_train.append(float(state["train_loss"]))
+                    loss_val.append(_extract_val_loss(val_metrics))
+                    dice_epochs.append(ep)
+                    dice_val.append(val_dice)
+
+                    if val_dice > best_val_dice:
+                        best_val_dice = val_dice
+                        best_state = {
+                            k: v.detach().cpu().clone()
+                            for k, v in model.state_dict().items()
+                        }
+
+                        sched_state_best = None
+                        if sched_bundle is not None:
+                            try:
+                                sched_state_best = sched_bundle.scheduler.state_dict()
+                            except Exception:
+                                sched_state_best = None
+
+                        self.ckpt.save_fold_best(
+                            fold_id=fold_id,
+                            fold_name=fold_name,
+                            model=model,
+                            optimizer=opt,
+                            scheduler_state=sched_state_best,
+                            best_val_metric=best_val_dice,
+                            extra={
+                                "fold_seed": fold_seed,
+                                "epoch": ep,
+                                "val_best_metrics": {"dice": best_val_dice},
+                            },
+                        )
+
                     sched_state_live = None
                     if sched_bundle is not None:
                         try:
@@ -259,9 +292,12 @@ class Trainer:
                     )
 
                     curves_loss: Dict[str, Curve] = {
-                        "train_loss": Curve(name="train_loss", x=[float(e) for e in loss_epochs], y=[float(v) for v in loss_train]),
+                        "train_loss": Curve(
+                            name="train_loss",
+                            x=[float(e) for e in loss_epochs],
+                            y=[float(v) for v in loss_train],
+                        ),
                     }
-
                     xs_v, ys_v = [], []
                     for e, v in zip(loss_epochs, loss_val):
                         if v is None:
@@ -283,7 +319,11 @@ class Trainer:
                     fc_dice = FoldCurves(
                         fold_name=fold_name,
                         curves={
-                            "val_dice": Curve(name="val_dice", x=[float(e) for e in dice_epochs], y=[float(v) for v in dice_val]),
+                            "val_dice": Curve(
+                                name="val_dice",
+                                x=[float(e) for e in dice_epochs],
+                                y=[float(v) for v in dice_val],
+                            ),
                         },
                     )
                     plot_fold_curves(
@@ -294,47 +334,24 @@ class Trainer:
                         savepath=str(dice_png),
                     )
 
-                if val_dice > best_val_dice:
-                    best_val_dice = val_dice
-                    best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-
                 state["best_val_metric"] = best_val_dice
                 self.hooks.on_epoch_end(state)
 
             if best_state is not None:
                 model.load_state_dict(best_state)
 
-            test_metrics = evaluate_series_full(
-                model,
-                test_frames,
-                patch=self.patch,
-                stride=self.stride,
-                device=self.device,
-                thr=self.thr,
-            )
+            with torch.inference_mode():
+                test_metrics = evaluate_series_full(
+                    model,
+                    test_frames,
+                    patch=self.patch,
+                    stride=self.stride,
+                    device=self.device,
+                    thr=self.thr,
+                )
+
             state["test_metrics"] = test_metrics
             self.hooks.on_fold_end(state)
-
-            sched_state = None
-            if sched_bundle is not None:
-                try:
-                    sched_state = sched_bundle.scheduler.state_dict()
-                except Exception:
-                    sched_state = None
-
-            self.ckpt.save_fold_best(
-                fold_id=fold_id,
-                fold_name=fold_name,
-                model=model,
-                optimizer=opt,
-                scheduler_state=sched_state,
-                best_val_metric=best_val_dice,
-                extra={
-                    "fold_seed": fold_seed,
-                    "test_metrics": test_metrics,
-                    "val_best_metrics": {"dice": best_val_dice},
-                },
-            )
 
             self.fold_results.append({
                 "fold_id": fold_id,
@@ -368,6 +385,7 @@ def _extract_val_loss(val_metrics: Dict[str, Any]) -> Optional[float]:
             except Exception:
                 pass
     return None
+
 
 def cfg_section(cfg: Dict[str, Any], key: str) -> Dict[str, Any]:
     """Return a config sub-section safely, defaulting to an empty dict."""
