@@ -15,7 +15,7 @@ model:
   base_channels: 64
 
 trainer:
-  epochs: 30000
+  epochs: 500
   batch_size: 2
   num_workers: 0
   seed: 1234

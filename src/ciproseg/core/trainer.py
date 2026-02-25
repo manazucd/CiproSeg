@@ -215,6 +215,7 @@ class Trainer:
 
                 state["train_loss"] = running_loss / max(1, len(train_loader))
                 state["lr"] = float(opt.param_groups[0].get("lr", 0.0))
+                state["is_eval_epoch"] = (ep % 10 == 0) or (ep == self.epochs)
 
                 if (ep % 10 == 0) or (ep == self.epochs):
 

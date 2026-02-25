@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-02-25, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -40,7 +40,7 @@ class ProgressBar(Hook):
     def on_train_start(self, state) -> None:
         if is_global_zero():
             print("[PB] Training started")
-
+  
     def on_fold_start(self, state) -> None:
         if not is_global_zero():
             return
@@ -50,31 +50,54 @@ class ProgressBar(Hook):
         n_train, n_val, n_test = state.get("n_train"), state.get("n_val"), state.get("n_test")
         patch = state.get("patch")
 
-        print("\n====================")
         fold_label = f"{fold_id:02d} | " if fold_id is not None else ""
-        print(f"[PB] Fold {fold_label}{fold_name} | test_series = {test_series}")
+        lines = [f"[PB] Fold {fold_label}{fold_name} | test_series = {test_series}"]
         if any(v is not None for v in (n_train, n_val, n_test)):
-            print(f"[PB] frames: train = {n_train} | val = {n_val} | test = {n_test}")
+            lines.append(f"[PB] frames: train = {n_train} | val = {n_val} | test = {n_test}")
         if patch is not None:
-            print(f"[PB] patch={patch} stride={state.get('stride')} epochs={state.get('epochs')} "
-                  f"batch={state.get('batch_size')} lr={state.get('lr')}")
-        print("====================")
+            lines.append(
+                f"[PB] patch={patch} stride={state.get('stride')} epochs={state.get('epochs')} "
+                f"batch={state.get('batch_size')} lr={state.get('lr')}"
+            )
+
+        width = max(len(l) for l in lines)
+        border = "+" + "-" * (width + 2) + "+"
+        print(f"\n{border}")
+        for line in lines:
+            print(f"| {line:<{width}} |")
+        print(border)
 
     def on_epoch_end(self, state) -> None:
         if not is_global_zero():
             return
-        val_metrics = state.get("val_metrics") or {}
-        best_val = state.get("best_val_metric")
-        msg = (
-            f"[{_ts()}] [PB] {state.get('fold_name', '')} | ep {int(state.get('epoch', 0)):03d} | "
-            f"train_loss = {_fmt(state.get('train_loss'), nd=5)} | "
-            f"val_loss = {_fmt(val_metrics.get('loss'), nd=5)} | "
-            f"val_dice = {_fmt(val_metrics.get('dice'))} | "
-            f"val_iou = {_fmt(val_metrics.get('iou'))}"
-        )
-        if best_val is not None:
-            msg += f" | best_val_dice = {_fmt(best_val)}"
-        print(msg, flush=True)
+
+        ep = int(state.get("epoch", 0))
+        fold_name = state.get("fold_name", "")
+        train_loss = _fmt(state.get("train_loss"), nd=5)
+        is_eval = state.get("is_eval_epoch", False)
+
+        if is_eval:
+            val_metrics = state.get("val_metrics") or {}
+            best_val = state.get("best_val_metric")
+            msg = (
+                f"[{_ts()}] [PB] {fold_name} | ep {ep:03d} | "
+                f"train_loss = {train_loss} | "
+                f"val_loss = {_fmt(val_metrics.get('loss'), nd=5)} | "
+                f"val_dice = {_fmt(val_metrics.get('dice'))} | "
+                f"val_iou = {_fmt(val_metrics.get('iou'))}"
+            )
+            if best_val is not None:
+                msg += f" | best_val_dice = {_fmt(best_val)}"
+            sep = "=" * len(msg)
+            print(sep, flush=True)
+            print(msg, flush=True)
+            print(sep, flush=True)
+        else:
+            msg = (
+                f"[{_ts()}] [PB] {fold_name} | ep {ep:03d} | "
+                f"train_loss = {train_loss}"
+            )
+            print(msg, flush=True)
 
     def on_fold_end(self, state) -> None:
         if not is_global_zero():
@@ -89,4 +112,3 @@ class ProgressBar(Hook):
     def on_train_end(self, state) -> None:
         if is_global_zero():
             print("[PB] Training finished")
-            

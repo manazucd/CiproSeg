@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-21
-#  Last modified : 2026-02-23, MK
+#  Last modified : 2026-02-25, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -120,12 +120,15 @@ def build_argparser() -> argparse.ArgumentParser:
 def _resolve_output_dir(input_dir: str, output_arg: Optional[str]) -> str:
     """
     If --output was given, use it as-is.
-    Otherwise place <input_name>_predictions as a sibling of the input directory.
+    Otherwise place <input_name>_predictions one directory above
+    the parent of the input directory (safely).
     """
     if output_arg:
         return output_arg
+
     p = Path(input_dir).resolve()
-    return str(p.parent / (p.name + "_predictions"))
+    base = p.parents[1] if len(p.parents) > 1 else p.parent
+    return str(base / f"{p.name}_predictions")
 
 
 def _validate_args(args: argparse.Namespace) -> None:
