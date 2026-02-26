@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import os
 import yaml
 import numpy as np
 
@@ -86,7 +87,8 @@ class Trainer:
         self.benchmark = bool(tcfg.get("benchmark", True))
 
         force_cpu = bool(tcfg.get("cpu", False))
-        self.device = "cuda" if (torch.cuda.is_available() and not force_cpu) else "cpu"
+        use_cuda = (not force_cpu) and torch.cuda.is_available() and (torch.cuda.device_count() > 0)
+        self.device = "cuda" if use_cuda else "cpu"
 
         mname = (self.cfg.get("model") or {}).get("name", "")
         req = 16 if mname == "unet4" else 4 
