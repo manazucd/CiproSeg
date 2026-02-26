@@ -34,8 +34,15 @@ echo
 
 cd "${PROJECT_ROOT}"
 
+OUTDIR=$(python - <<'PY'
+import yaml
+cfg = yaml.safe_load(open("configs/experiment.yaml"))
+print((cfg.get("trainer") or {}).get("output_dir", "runs"))
+PY
+)
+
 TIMESTAMP="$(date +"%Y-%m-%d_%H-%M-%S")"
-LOG_DIR="${PROJECT_ROOT}/logs"
+LOG_DIR="${PROJECT_ROOT}/${OUTDIR}/logs"
 mkdir -p "${LOG_DIR}"
 
 exec > "${LOG_DIR}/Train_${TIMESTAMP}_job${SLURM_JOB_ID}.log" \

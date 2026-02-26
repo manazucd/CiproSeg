@@ -11,14 +11,14 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-21
-#  Last modified : 2026-02-25, MK
+#  Last modified : 2026-02-26, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
 from __future__ import annotations
-from . import unet as _unet
-from . import unet_2 as _unet_2
+from . import unet4 as _unet4
+from . import unet2 as _unet2
 from .registry import build_model_from_cfg, create_model, register_model
 
 __all__ = [

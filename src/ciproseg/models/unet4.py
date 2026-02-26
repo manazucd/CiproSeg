@@ -41,7 +41,7 @@ class DoubleConv(nn.Module):
         return self.block(x)
 
 
-class UNet(nn.Module):
+class UNet4(nn.Module):
     """
     4 level U-Net for binary segmentation. Returns raw logits,
     apply torch.sigmoid() externally to obtain probabilities.
@@ -88,6 +88,6 @@ class UNet(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-@register_model("unet")
-def build_unet_from_registry(**kwargs) -> UNet:
-    return UNet(**kwargs)
+@register_model("unet4")
+def build_unet4_from_registry(**kwargs) -> UNet4:
+    return UNet4(**kwargs)

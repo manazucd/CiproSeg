@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-25, MK
+#  Last modified : 2026-02-26, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -20,13 +20,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 import numpy as np
 
 import torch, gc
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from ..models.unet import UNet
+from ..models import build_model_from_cfg
 from ..optim.optimizers import build_optimizer
 from ..optim.schedulers import build_scheduler, SchedulerBundle
 from ..utils.seed import seed_everything
@@ -87,8 +88,10 @@ class Trainer:
         force_cpu = bool(tcfg.get("cpu", False))
         self.device = "cuda" if (torch.cuda.is_available() and not force_cpu) else "cpu"
 
-        if self.patch % 16 != 0:
-            raise ValueError("patch must be divisible by 16 for 4 pooling steps U-Net.")
+        mname = (self.cfg.get("model") or {}).get("name", "")
+        req = 16 if mname == "unet4" else 4 
+        if self.patch % req != 0:
+            raise ValueError(f"patch must be divisible by {req} for model '{mname}'.")
 
         self.best_metric: float = float("-inf")
         self.last_metrics: Dict[str, float] = {}
@@ -96,6 +99,13 @@ class Trainer:
 
     def train(self, start_state: Optional[Dict[str, Any]] = None) -> None:
         _ = start_state
+        run_dir = Path((self.cfg.get("trainer") or {}).get("output_dir", "runs"))
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "config.yaml", "w") as f:
+            yaml.safe_dump(self.cfg, f, sort_keys=False)
+
+        state: Dict[str, Any] = {"cfg": self.cfg}
+        self.hooks.on_train_start(state)
 
         index = build_index(self.dataset_root)
         folds = make_loso_folds(index)
@@ -120,7 +130,7 @@ class Trainer:
 
             seed_everything(fold_seed, deterministic=self.deterministic, benchmark=self.benchmark)
 
-            model = UNet(in_channels=1, out_channels=1).to(self.device)
+            model = build_model_from_cfg(self.cfg).to(self.device)
             criterion = nn.BCEWithLogitsLoss()
 
             K = default_crops_per_frame(
@@ -156,6 +166,7 @@ class Trainer:
             )
 
             state: Dict[str, Any] = {
+                "cfg": self.cfg,
                 "fold_id": fold_id,
                 "fold_name": fold_name,
                 "test_series": test_s,

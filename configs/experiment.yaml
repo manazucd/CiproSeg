@@ -9,7 +9,7 @@ dataset:
   stride: 128
 
 model:
-  name: unet # "unet" for 4 levels and "unet2" for much smaller 2 levels
+  name: unet4 # unet2 = 2 levels (smaller), unet4 = 4 levels (bigger)
   in_channels: 1
   out_channels: 1
   base_channels: 64
@@ -30,7 +30,7 @@ trainer:
   cpu: false
 
   # where summaries + fold checkpoints go
-  output_dir: "runs/ciproseg_ecoli_unet"
+  output_dir: "runs/unet4"
 
 optim:
   name: adamw

@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-02-26, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -39,17 +39,13 @@ def create_model(name: str, **kwargs) -> Any:
 
 
 def build_model_from_cfg(cfg: Dict[str, Any]) -> Any:
-    """
-    Builds a model from config. Expected structure:
-        model:
-            name: unet
-            params:
-                in_channels: 1
-                out_channels: 1
-                base_channels: 64
-    """
     model_cfg = cfg.get("model") or {}
     name = model_cfg.get("name")
     if name is None:
         raise ValueError("Model name missing in config under 'model.name'.")
-    return create_model(name, **(model_cfg.get("params") or {}))
+
+    params = model_cfg.get("params")
+    if params is None:
+        params = {k: v for k, v in model_cfg.items() if k != "name"}
+
+    return create_model(name, **params)

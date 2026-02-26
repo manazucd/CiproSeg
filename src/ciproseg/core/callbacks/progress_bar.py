@@ -36,10 +36,23 @@ def _ts() -> str:
 
 class ProgressBar(Hook):
     """Prints training progress to stdout. Reads state populated by Trainer/Evaluator."""
-
+       
     def on_train_start(self, state) -> None:
-        if is_global_zero():
-            print("[PB] Training started")
+        if not is_global_zero():
+            return
+        cfg = state.get("cfg")
+        print("[PB] Training started")
+        if cfg is not None:
+            model = (cfg.get("model") or {}).get("name", "?")
+            droot = (cfg.get("dataset") or {}).get("root", "?")
+            patch = (cfg.get("dataset") or {}).get("patch", "?")
+            stride = (cfg.get("dataset") or {}).get("stride", "?")
+            epochs = (cfg.get("trainer") or {}).get("epochs", "?")
+            bs = (cfg.get("trainer") or {}).get("batch_size", "?")
+            print(f"[PB] config: model={model} root={droot} patch={patch} stride={stride} epochs={epochs} batch={bs}")
+
+
+
   
     def on_fold_start(self, state) -> None:
         if not is_global_zero():
