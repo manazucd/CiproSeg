@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -54,7 +54,6 @@ class _DummyEvaluator:
 
 def test_engine_fit_and_evaluate_smoke(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("ciproseg.core.engine.Trainer", _DummyTrainer)
-    monkeypatch.setattr("ciproseg.core.engine.Evaluator", _DummyEvaluator)
 
     cfg: Dict[str, Any] = {
         "trainer": {"output_dir": str(tmp_path)},

@@ -10,22 +10,21 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
 from __future__ import annotations
 
-import os
 import sys
 import argparse
-from datetime import datetime
 from typing import Any, Dict
 
 import yaml
 
 from ..core.engine import Engine
+from ..core.trainer import resolve_run_output_dir
 from ..utils.config import load_config
 from ..utils.seed import seed_everything
 from ..utils.logger import setup_logging, get_logger
@@ -40,7 +39,6 @@ def build_argparser() -> argparse.ArgumentParser:
 
 
 def _apply_overrides(cfg: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
-    # Shallow copy affected sections to avoid mutating the original config dict.
     cfg = {**cfg, "trainer": dict(cfg.get("trainer") or {})}
     if args.seed is not None:
         cfg["trainer"]["seed"] = int(args.seed)
@@ -55,15 +53,13 @@ def main() -> int:
     cfg = load_config(args.config)
     cfg = _apply_overrides(cfg, args)
 
+    run_dir = resolve_run_output_dir(cfg)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     setup_logging(cfg)
     logger = get_logger(cfg)
 
-    tcfg = cfg.get("trainer") or {}
-    outdir = tcfg.get("output_dir", "runs")
-    os.makedirs(outdir, exist_ok=True)
-
-    # Persist the fully resolved config so every run is self documenting.
-    cfg_out = os.path.join(outdir, f"config_resolved_{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml")
+    cfg_out = run_dir / "config_resolved.yaml"
     try:
         with open(cfg_out, "w", encoding="utf-8") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
@@ -71,11 +67,13 @@ def main() -> int:
     except Exception as e:
         logger.warning(f"[CiproSeg] Could not write resolved config to {cfg_out}: {e}")
 
+    tcfg = cfg.get("trainer") or {}
     seed = int(tcfg.get("seed", 42))
     deterministic = bool(tcfg.get("deterministic", False))
     benchmark = bool(tcfg.get("benchmark", True))
 
     logger.info(f"[CiproSeg] Config: {args.config}")
+    logger.info(f"[CiproSeg] Run directory: {run_dir}")
     logger.info(f"[CiproSeg] seed={seed}  deterministic={deterministic}  benchmark={benchmark}")
 
     seed_everything(seed, deterministic=deterministic, benchmark=benchmark)

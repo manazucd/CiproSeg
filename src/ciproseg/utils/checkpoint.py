@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -32,8 +32,9 @@ class Checkpointer:
     """
     Handles two levels of persistence for LOSO training:
 
-    Per fold: best checkpoint by validation metric:
-        {output_dir}/fold_XX/best.pt  (+  best.json sidecar)
+    Per fold: best + last checkpoints:
+        {output_dir}/{fold_name}/best.pt  (+  best.json sidecar)
+        {output_dir}/{fold_name}/last.pt  (+  last.json sidecar)
 
     Run level: summary written after all folds complete:
         {output_dir}/run_summary.pt  (+  run_summary.json)
@@ -78,11 +79,12 @@ class Checkpointer:
         except Exception:
             pass
 
-    def _fold_dir(self, fold_id: int) -> str:
-        d = os.path.join(self.dir, f"fold_{fold_id:02d}")
-        os.makedirs(d, exist_ok=True)
+    def fold_dir(self, fold_name: str) -> Path:
+        out_dir = Path(self.dir).expanduser()
+        d = out_dir / fold_name
+        d.mkdir(parents=True, exist_ok=True)
         return d
-    
+
     def save_fold_last(
         self,
         fold_id: int,
@@ -97,7 +99,7 @@ class Checkpointer:
         if not is_global_zero():
             return ""
 
-        dpath = self.fold_dir(fold_id, fold_name)   # .../fold_XX/{fold_name}
+        dpath = self.fold_dir(fold_name)
         path = dpath / "last.pt"
         json_path = dpath / "last.json"
 
@@ -134,7 +136,6 @@ class Checkpointer:
 
         return str(path)
 
-
     def save_fold_best(
         self,
         fold_id: int,
@@ -149,9 +150,9 @@ class Checkpointer:
         if not is_global_zero():
             return ""
 
-        d = self._fold_dir(fold_id)
-        path = os.path.join(d, "best.pt")
-        json_path = os.path.join(d, "best.json")
+        dpath = self.fold_dir(fold_name)
+        path = dpath / "best.pt"
+        json_path = dpath / "best.json"
 
         state: Dict[str, Any] = {
             "fold_id": int(fold_id),
@@ -165,12 +166,11 @@ class Checkpointer:
         if extra:
             state.update(extra)
 
-        tmp_fd, tmp_path = tempfile.mkstemp(dir=d, prefix="tmp_fold_", suffix=".pt")
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=str(dpath), prefix="tmp_fold_", suffix=".pt")
         os.close(tmp_fd)
         torch.save(state, tmp_path)
-        os.replace(tmp_path, path)
+        os.replace(tmp_path, str(path))
 
-        # JSON sidecar carries metadata only. no model weights.
         try:
             meta = {
                 "fold_id": int(fold_id),
@@ -183,10 +183,5 @@ class Checkpointer:
         except Exception:
             pass
 
-        return path
+        return str(path)
     
-    def fold_dir(self, fold_id: int, fold_name: str) -> Path:
-        out_dir = Path(str((self.cfg.get("trainer") or {}).get("output_dir", "runs"))).expanduser()
-        d = out_dir / f"fold_{fold_id:02d}" / fold_name
-        d.mkdir(parents=True, exist_ok=True)
-        return d

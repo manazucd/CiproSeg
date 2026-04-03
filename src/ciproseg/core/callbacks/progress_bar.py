@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-25, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -21,6 +21,7 @@ from datetime import datetime
 
 from ..hooks import Hook
 from ...utils.dist import is_global_zero
+from ...utils.logger import get_logger
 
 
 def _fmt(x, nd: int = 4) -> str:
@@ -35,13 +36,14 @@ def _ts() -> str:
 
 
 class ProgressBar(Hook):
-    """Prints training progress to stdout. Reads state populated by Trainer/Evaluator."""
-       
+    """Prints training progress via the ciproseg logger (console + train.log)."""
+
     def on_train_start(self, state) -> None:
         if not is_global_zero():
             return
+        logger = get_logger()
         cfg = state.get("cfg")
-        print("[PB] Training started")
+        logger.info("[PB] Training started")
         if cfg is not None:
             model = (cfg.get("model") or {}).get("name", "?")
             droot = (cfg.get("dataset") or {}).get("root", "?")
@@ -49,14 +51,15 @@ class ProgressBar(Hook):
             stride = (cfg.get("dataset") or {}).get("stride", "?")
             epochs = (cfg.get("trainer") or {}).get("epochs", "?")
             bs = (cfg.get("trainer") or {}).get("batch_size", "?")
-            print(f"[PB] config: model={model} root={droot} patch={patch} stride={stride} epochs={epochs} batch={bs}")
+            logger.info(
+                "[PB] config: model=%s root=%s patch=%s stride=%s epochs=%s batch=%s",
+                model, droot, patch, stride, epochs, bs,
+            )
 
-
-
-  
     def on_fold_start(self, state) -> None:
         if not is_global_zero():
             return
+        logger = get_logger()
         fold_id = state.get("fold_id")
         fold_name = state.get("fold_name", "")
         test_series = state.get("test_series", "")
@@ -73,16 +76,17 @@ class ProgressBar(Hook):
                 f"batch={state.get('batch_size')} lr={state.get('lr')}"
             )
 
-        width = max(len(l) for l in lines)
+        width = max(len(line) for line in lines)
         border = "+" + "-" * (width + 2) + "+"
-        print(f"\n{border}")
+        logger.info(border)
         for line in lines:
-            print(f"| {line:<{width}} |")
-        print(border)
+            logger.info("| %s |", f"{line:<{width}}")
+        logger.info(border)
 
     def on_epoch_end(self, state) -> None:
         if not is_global_zero():
             return
+        logger = get_logger()
 
         ep = int(state.get("epoch", 0))
         fold_name = state.get("fold_name", "")
@@ -102,26 +106,32 @@ class ProgressBar(Hook):
             if best_val is not None:
                 msg += f" | best_val_dice = {_fmt(best_val)}"
             sep = "=" * len(msg)
-            print(sep, flush=True)
-            print(msg, flush=True)
-            print(sep, flush=True)
+            logger.info(sep)
+            logger.info(msg)
+            logger.info(sep)
         else:
             msg = (
                 f"[{_ts()}] [PB] {fold_name} | ep {ep:03d} | "
                 f"train_loss = {train_loss}"
             )
-            print(msg, flush=True)
+            logger.info(msg)
 
     def on_fold_end(self, state) -> None:
         if not is_global_zero():
             return
+        logger = get_logger()
         m = state.get("test_metrics") or {}
-        print(
-            f"[{_ts()}] {state.get('fold_name', '')} |< TEST >| "
-            f"dice = {_fmt(m.get('dice'))} | iou = {_fmt(m.get('iou'))} | "
-            f"prec = {_fmt(m.get('precision'))} | rec = {_fmt(m.get('recall'))}"
+        logger.info(
+            "[%s] %s |< TEST >| dice = %s | iou = %s | prec = %s | rec = %s",
+            _ts(),
+            state.get("fold_name", ""),
+            _fmt(m.get("dice")),
+            _fmt(m.get("iou")),
+            _fmt(m.get("precision")),
+            _fmt(m.get("recall")),
         )
 
     def on_train_end(self, state) -> None:
         if is_global_zero():
-            print("[PB] Training finished")
+            get_logger().info("[PB] Training finished")
+            

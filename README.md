@@ -1,353 +1,277 @@
 # CiproSeg
 
-A modular, research grade PyTorch framework for **LOSO cross validation cell segmentation** using U-Net.
+A PyTorch framework for binary cell segmentation using U-Net with Leave-One-Series-Out (LOSO) cross-validation. Built for reproducible biomedical microscopy experiments on a single GPU.
 
-Designed for:
+## What it does
 
-- Reproducible biomedical image segmentation
-- Leave-One-Series-Out (LOSO) evaluation
-- Clean experiment configuration
-- Single GPU training (no DDP)
-- Lightweight checkpointing & metrics tracking
+CiproSeg trains a U-Net on time-series microscopy data, holding out one series at a time for testing. Each fold gets its own checkpoint, validation curves, and test metrics. At the end you have a per-fold breakdown of segmentation performance across the entire dataset with no data leakage, deterministic seeds, one config file.
 
-# CiproSeg Installation Guide
+## Installation
 
-## Quick Install
-
-### From PyPI (when published)
-```bash
-pip install ciproseg
-```
-
-### From Source (Development)
-
-#### 1. Clone the repository
 ```bash
 git clone https://github.com/manazucd/CiproSeg.git
 cd CiproSeg
+pip install -e .
 ```
 
-#### 2. Install in development mode
-```bash
-# Basic installation
-pip install -e .
+For development (adds pytest, ruff, mypy):
 
-# With development tools
+```bash
 pip install -e ".[dev]"
 ```
 
-## Requirements
+Requires Python 3.9+ and PyTorch 2.2+. A CUDA GPU is recommended for training but not required.
 
-- Python 3.9 or higher
-- CUDA-capable GPU (recommended for training)
-
-## Dependencies
-
-The package automatically installs:
-- **PyTorch** (>=2.2): Deep learning framework
-- **NumPy** (>=1.23): Numerical computations
-- **OpenCV** (>=4.8): Image processing
-- **tifffile** (>=2023.7.0): TIFF file handling
-- **matplotlib** (>=3.7.0): Visualization
-- **PyYAML** (>=6.0): Configuration files
-- **tqdm** (>=4.66): Progress bars
-
-## Verify Installation
-
-After installation, verify by running:
+Verify it works:
 
 ```bash
-# Check if CLI commands are available
 ciproseg-train --help
 ciproseg-eval --help
-
-# Test import in Python
-python -c "import ciproseg; print(f'CiproSeg version: {ciproseg.__version__}')"
+ciproseg-infer --help
 ```
 
-## Using the Command-Line Interface
+## Dataset layout
 
-### Training
-```bash
-ciproseg-train --config path/to/config.yaml
+CiproSeg expects images and masks in matched directory trees. Each subdirectory under `images/` and `masks/` is a "series", one series is held out per LOSO fold.
+
+```
+your_data/
+  images/
+    series_A/
+      frame_000.tif
+      frame_001.tif
+      ...
+    series_B/
+      ...
+  masks/
+    series_A/
+      frame_000.tif
+      frame_001.tif
+      ...
+    series_B/
+      ...
 ```
 
-### Evaluation
-```bash
-ciproseg-eval --config path/to/config.yaml --checkpoint path/to/checkpoint.pth
-```
+Filenames must match exactly between `images/<series>/` and `masks/<series>/`. Supported formats: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`. Masks should be binary (any nonzero pixel = foreground).
 
-### CiproSeg Inference Guide
-CiproSeg provides a command-line interface for running tiled full-image inference on a directory of microscopy images.
+## Configuration
 
-The model performs **pixel-wise semantic segmentation**, predicting for each pixel the probability that it belongs to a bacterial cell (foreground) versus background.
+Everything is controlled through a single YAML file:
 
-## Basic Inference (Prediction Only)
+```yaml
+dataset:
+  name: ciproseg_ecoli
+  root: /path/to/your_data
+  train_frac: 0.8
+  patch: 256
+  stride: 128
 
-Run inference on a directory of images:
+model:
+  name: unet4          # unet2 (smaller) or unet4 (larger)
+  in_channels: 1
+  out_channels: 1
+  base_channels: 64
 
-``` bash
-ciproseg-infer \
-  --ckpt runs/ciproseg_ecoli_unet/fold_01/best.pt \
-  --input Data/miniture_4_debug/images/controlnonsilica/
-```
+trainer:
+  epochs: 500
+  batch_size: 2
+  num_workers: 4
+  seed: 1234
+  thr: 0.5
+  target_patches_per_epoch: 1000
+  deterministic: false
+  benchmark: true
+  cpu: false
+  output_dir: runs
 
-This will:
-  - Load the trained checkpoint
-  - Run tiled inference on all images in the input directory
-  - Create an output directory next to the input folder
-  - Generate prediction artefacts for each image
+optim:
+  name: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
 
-## Inference with Ground Truth (Evaluation Visualisation)
+sched:
+  name: cosine          # none, cosine, step, onecycle
+  tmax: 250
 
-If ground-truth masks are available, provide the `--masks` directory:
-
-``` bash
-ciproseg-infer \
-  --ckpt runs/ciproseg_ecoli_unet/fold_01/best.pt \
-  --input Data/miniture_4_debug/images/controlnonsilica/ \
-  --masks Data/miniture_4_debug/masks/controlnonsilica/ \
-  --output /data/predictions/ \
-  --threshold 0.45 \
-  --patch 512 --stride 256
-```
-
-> **Important:**\
-> Ground-truth mask filenames must match image filenames (same stem).
-
-Example:
-    images/controlnonsilica/01.tif
-    masks/controlnonsilica/01.tif
-
-# Generated Output Files
-For each input image `01.tif`, the following PNG files are created:
-
-## 1 `01_prob.png` --- Probability Map (16-bit)
-
-Represents the raw model output after sigmoid activation.
--   Pixel-wise probability in range `[0, 1]`
--   Stored as 16-bit PNG for precision
-
-Interpretation:
--   Dark -> high confidence background
--   Bright -> high confidence cell
--   Mid-gray -> uncertain region
-
-## 2 `01_binary.png` --- Binary Segmentation Mask
-
-Thresholded probability map.
--   255 -> Cell (foreground)
--   0 -> Background
-
-This is the final segmentation used for quantitative analysis.
-
-## 3 `01_pred_overlay.png` --- Prediction Boundary Overlay
--   Original grayscale microscopy image
--   Predicted cell boundaries drawn in **green**
-
-The model predicts full cell regions. Only the contour (outline) is drawn so that biological texture remains
-visible.
-
-## 4 `01_gt_overlay.png` *(only if `--masks` provided)*
--   Original image
--   Ground-truth boundaries drawn in **cyan**
-
-## 5 `01_diff.png` *(only if `--masks` provided)*
-
-Color coded comparison between prediction and ground truth:
-  - Green -> True Positive (correct cell pixel)
-  - Red -> False Positive (model over segmentation)
-  - Blue -> False Negative (model missed cell pixel)
-  - Dark -> True Negative (correct background)
-
-This is useful for diagnosing model behavior.
-
-# Notes
-  - Inference is tiled internally to support large images.
-  - Images smaller than patch size are automatically padded.
-  - Non divisible dimensions are handled via overlap averaging.
-  - Output files are written atomically for robustness.
-
-## Common Installation Issues
-
-### Issue: CUDA not available
-**Solution**: Install PyTorch with CUDA support:
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-```
-
-### Issue: OpenCV conflicts
-**Solution**: Uninstall conflicting opencv packages:
-```bash
-pip uninstall opencv-python opencv-python-headless opencv-contrib-python -y
-pip install opencv-python>=4.8
-```
-
-### Issue: Permission denied
-**Solution**: Install in user space:
-```bash
-pip install --user -e .
-```
-
-## For Contributors
-
-Install development dependencies:
-```bash
-pip install -e ".[dev]"
-```
-
-This includes:
-- **pytest**: Testing framework
-- **ruff**: Fast Python linter
-- **mypy**: Static type checker
-
-Run tests:
-```bash
-pytest tests/
-```
-
-Run linting:
-```bash
-ruff check src/
-```
-
-## Uninstall
-
-```bash
-pip uninstall ciproseg
+logger:
+  name: ciproseg
+  level: INFO
 ```
 
 ## Training
-
-Run training with a YAML config:
 
 ```bash
 ciproseg-train --config configs/experiment.yaml
 ```
 
-or:
+This builds a LOSO cross-validation loop: for N series, N folds run sequentially. Each fold trains on N−1 series (split 80/20 into train/val by time), then evaluates on the held-out series. Best checkpoints are selected by validation Dice.
+
+Override seed or force CPU from the command line:
 
 ```bash
-python -m ciproseg.cli.train_cli --config configs/experiment.yaml
+ciproseg-train --config configs/experiment.yaml --seed 42
+ciproseg-train --config configs/experiment.yaml --cpu
 ```
 
-### What happens during training?
+### Output structure
 
-- Dataset is indexed from:
+Each run gets a unique timestamped directory:
 
-  ```
-  dataset_root/
-    images/<series>/*.png
-    masks/<series>/*.png
-  ```
-- Leave-One-Series-Out (LOSO) folds are created
-- For each fold:
-  - Train on N-1 series
-  - Validate on split of training series
-  - Test on held out series
-- Best validation Dice is tracked per fold
-- Mean test metrics across folds are reported
+```
+runs/unet4/2026-04-03_153000/
+  config.yaml
+  config_resolved.yaml
+  train.log
+  run_summary.pt
+  run_summary.json
+  fold_01_test_seriesA/
+    best.pt
+    best.json
+    last.pt
+    last.json
+    loss.png
+    dice.png
+  fold_02_test_seriesB/
+    ...
+```
+
+`config.yaml` is the experiment config as passed in. `config_resolved.yaml` includes all runtime overrides and the resolved output path. `train.log` contains the full training log (epoch losses, validation metrics, fold summaries). The fold directories each contain the best and latest checkpoints, JSON sidecars with metadata, and training curve plots.
 
 ## Evaluation
 
-```bash
-ciproseg-eval --config configs/experiment.yaml
-```
-
-This runs evaluation using the configured dataset and prints summary metrics.
-
-## Project Structure
-In order to print the project structure, please run the following command from the project home directory
-```bash
-python3 tools/print_tree.py 
-```
-
-## Checkpointing
-
-This project uses **run-level checkpointing**, not per-epoch resume.
-
-After training, a run summary is saved:
-
-```
-runs/
-  run_summary.pt
-  run_summary.json
-```
-
-Saved information:
-
-* Best validation metric (global across folds)
-* Mean test metrics
-* Full experiment config
-
-This design keeps LOSO training simple and reproducible.
-
-## Tests
-
-Run tests with:
+Point `ciproseg-eval` at any checkpoint. Everything it needs (model architecture, weights, dataset root, fold identity) is stored inside the `.pt` file.
 
 ```bash
-pytest
+ciproseg-eval --ckpt runs/unet4/2026-04-03_153000/fold_01_test_seriesA/best.pt
 ```
 
-### Test Types
+Output:
 
-**Unit tests (white-box)**
-
-* `test_dataset.py`
-* `test_model.py`
-* `test_loss.py`
-* `test_checkpoint.py`
-
-These validate individual components in isolation.
-
-**Integration / smoke test (black-box-ish)**
-
-* `test_engine.py`
-
-Validates that `Engine.fit()` and evaluation wiring work correctly without running heavy training.
-
----
-
-## Configuration
-
-All experiments are controlled via YAML:
-
-```yaml
-dataset:
-  root: /path/to/data
-  patch: 256
-  stride: 128
-
-trainer:
-  epochs: 40
-  batch_size: 8
-  seed: 1234
-
-optim:
-  name: adamw
-  lr: 1e-4
-
-sched:
-  name: cosine
-  interval: epoch
+```
+────────────────────────────────────────────────────────────
+  Checkpoint : runs/.../fold_01_test_seriesA/best.pt
+  Fold       : fold_01_test_seriesA
+  Test series: seriesA
+────────────────────────────────────────────────────────────
+  Dice       : 0.8234
+  IoU        : 0.7012
+  Precision  : 0.8456
+  Recall     : 0.8019
+  Loss (BCE) : 0.14523
+────────────────────────────────────────────────────────────
 ```
 
-## Hardware
-- Single GPU or CPU
-- No Distributed Data Parallel (DDP)
-- No torchrun required
-- No DeepSpeed/ZeRO
+Useful flags:
 
-## Design Principles
-- Engine orchestrates only
-- Trainer contains task logic (LOSO)
-- No data leakage between folds
-- Reproducible seeds per fold
-- Clean separation of concerns
+```bash
+# Save metrics to a file
+ciproseg-eval --ckpt .../best.pt --json metrics.json
 
-## Intended Use
-- Biomedical image segmentation research
-- Cell segmentation
-- LOSO cross-validation experiments
-- Reproducible academic studies
+# Force CPU
+ciproseg-eval --ckpt .../best.pt --cpu
+
+# Override dataset path (if data moved since training)
+ciproseg-eval --ckpt .../best.pt --dataset-root /new/path/to/data
+
+# Different tiling parameters
+ciproseg-eval --ckpt .../best.pt --patch 512 --stride 256 --thr 0.45
+```
+
+## Inference
+
+Run a trained model on a directory of images to produce segmentation masks and overlays:
+
+```bash
+ciproseg-infer \
+  --ckpt runs/unet4/2026-04-03_153000/fold_01_test_seriesA/best.pt \
+  --input path/to/images/seriesA/
+```
+
+This creates for each input image (e.g. `frame_001.tif`):
+
+| File | Description |
+|---|---|
+| `frame_001_prob.png` | 16-bit probability map (0 = background, 65535 = cell) |
+| `frame_001_binary.png` | Binary mask after thresholding (0 or 255) |
+| `frame_001_pred_overlay.png` | Original image with predicted boundaries in green |
+
+If you provide ground-truth masks with `--masks`, two additional files are generated:
+
+| File | Description |
+|---|---|
+| `frame_001_gt_overlay.png` | Original image with ground-truth boundaries in cyan |
+| `frame_001_diff.png` | TP (green) / FP (red) / FN (blue) / TN (dark) |
+
+Full example with masks and custom parameters:
+
+```bash
+ciproseg-infer \
+  --ckpt .../best.pt \
+  --input path/to/images/seriesA/ \
+  --masks path/to/masks/seriesA/ \
+  --output predictions/seriesA/ \
+  --threshold 0.45 \
+  --patch 512 \
+  --stride 256
+```
+
+Other options: `--cpu`, `--device cuda:1`, `--verbose`.
+
+## SLURM
+
+Job scripts are provided in `scripts/` for HPC clusters:
+
+```bash
+sbatch scripts/slurm_gpu.sh    # GPU partition
+sbatch scripts/slurm_cpu.sh    # CPU-only partition
+```
+
+Submit from the project root or the `scripts/` directory, the scripts auto-detect the project location. Training output goes to `train.log` inside the timestamped run directory; SLURM's own `slurm-<jobid>.out` catches system-level messages (driver errors, OOM kills).
+
+## Testing
+
+```bash
+pytest tests/
+```
+
+The test suite covers model forward passes, dataset indexing and splitting, loss computation, checkpointing, and training orchestration. For static analysis:
+
+```bash
+ruff check src/
+mypy src/
+```
+
+## How it works
+
+**Engine** orchestrates runs but contains no task logic. It lazily builds the Trainer on first access, so evaluation-only workflows never touch training code.
+
+**Trainer** owns the full LOSO loop: builds the dataset index, creates N folds, trains each fold with per-epoch logging, selects checkpoints by validation Dice, and runs final test evaluation on the held-out series. Each fold gets a deterministic seed derived from the base seed.
+
+**Evaluator** (`evaluate_checkpoint`) is a standalone function. It loads a checkpoint, rebuilds the model from the config stored inside it, identifies the held-out test series from the fold name, and runs tiled inference. No config file needed, the checkpoint is self-contained.
+
+**Checkpointer** handles atomic file writes (temp file + `os.replace`) for both fold-level checkpoints and the run summary. JSON sidecars carry metadata without requiring `torch.load` to browse results.
+
+**Tiled inference** handles images larger than the patch size by splitting them into overlapping tiles, running each through the model, and averaging predictions in overlap regions. Padding is applied automatically for images smaller than the patch.
+
+## Design choices
+
+- **Single GPU only.** No DDP, no torchrun, no DeepSpeed. This keeps the code simple and the experiments reproducible. If you need multi-GPU, this isn't the right tool.
+- **No mid-fold resume.** Checkpoints are saved per fold, but training always restarts from fold 1. LOSO folds are fast enough on a single GPU that this is rarely a problem.
+- **Self-contained checkpoints.** Every `.pt` file stores the full config, model weights, optimizer state, and fold metadata. You can evaluate or run inference months later without hunting for the original config file.
+- **Timestamp-based run directories.** Each training run gets a unique directory (`runs/model/YYYY-MM-DD_HHMMSS/`). Nothing is ever overwritten.
+
+## Citation
+
+If you use CiproSeg in your work, please cite:
+
+```bibtex
+@software{ciproseg2026,
+  title   = {CiproSeg: LOSO U-Net Segmentation Framework},
+  year    = {2026},
+  url     = {https://github.com/manazucd/CiproSeg}
+}
+```
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE) for details.

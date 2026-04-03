@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-26, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -18,13 +18,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import os
-import yaml
 import numpy as np
 
-import torch, gc
+import torch
+import gc
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -68,7 +68,9 @@ class Trainer:
         self.cfg = cfg
         self.datamodule = datamodule
         self.hooks = hooks or HookList([])
-        self.ckpt = Checkpointer(cfg)
+
+        self.run_dir = resolve_run_output_dir(self.cfg)
+        self.ckpt = Checkpointer(self.cfg)
 
         dcfg = cfg["dataset"]
         self.dataset_root = dcfg["root"]
@@ -91,7 +93,7 @@ class Trainer:
         self.device = "cuda" if use_cuda else "cpu"
 
         mname = (self.cfg.get("model") or {}).get("name", "")
-        req = 16 if mname == "unet4" else 4 
+        req = 16 if mname == "unet4" else 4
         if self.patch % req != 0:
             raise ValueError(f"patch must be divisible by {req} for model '{mname}'.")
 
@@ -101,10 +103,6 @@ class Trainer:
 
     def train(self, start_state: Optional[Dict[str, Any]] = None) -> None:
         _ = start_state
-        run_dir = Path((self.cfg.get("trainer") or {}).get("output_dir", "runs"))
-        run_dir.mkdir(parents=True, exist_ok=True)
-        with open(run_dir / "config.yaml", "w") as f:
-            yaml.safe_dump(self.cfg, f, sort_keys=False)
 
         state: Dict[str, Any] = {"cfg": self.cfg}
         self.hooks.on_train_start(state)
@@ -120,7 +118,7 @@ class Trainer:
             torch.cuda.empty_cache()
             gc.collect()
 
-            fold_name = f"fold{fold_id:02d}_test_{test_s}"
+            fold_name = f"fold_{fold_id:02d}_test_{test_s}"
             fold_seed = self.seed + 1000 * fold_id
 
             train_frames, val_frames, test_frames = build_fold_splits(
@@ -195,7 +193,7 @@ class Trainer:
             dice_epochs: List[int] = []
             dice_val: List[float] = []
 
-            fold_dir = self.ckpt.fold_dir(fold_id, fold_name)
+            fold_dir = self.ckpt.fold_dir(fold_name)
             loss_png = fold_dir / "loss.png"
             dice_png = fold_dir / "dice.png"
 
@@ -237,7 +235,7 @@ class Trainer:
                             model,
                             val_frames,
                             patch=self.patch,
-                            stride=self.patch,
+                            stride=self.stride,
                             device=self.device,
                             thr=self.thr,
                             compute_loss=True,
@@ -404,3 +402,36 @@ def _extract_val_loss(val_metrics: Dict[str, Any]) -> Optional[float]:
 def cfg_section(cfg: Dict[str, Any], key: str) -> Dict[str, Any]:
     """Return a config sub-section safely, defaulting to an empty dict."""
     return cfg.get(key) or {}
+
+
+def _safe_name(s: str) -> str:
+    """Filesystem-safe short name."""
+    keep = []
+    for ch in str(s).strip().replace(" ", "_"):
+        if ch.isalnum() or ch in ("-", "_"):
+            keep.append(ch)
+    return "".join(keep) or "model"
+
+
+def resolve_run_output_dir(cfg: Dict[str, Any]) -> Path:
+    """
+    Resolve a unique, timestamped run directory and update cfg in place.
+
+    Layout:  <base_output_dir> / <model_name> / <timestamp>
+    Example: runs/unet4/2026-04-03_153000
+    """
+    tcfg = cfg.setdefault("trainer", {})
+
+    if tcfg.get("_output_dir_resolved", False):
+        return Path(str(tcfg["output_dir"]))
+
+    mcfg = cfg.get("model") or {}
+    base_dir = Path(str(tcfg.get("output_dir", "runs"))).expanduser()
+    model_name = _safe_name(mcfg.get("name", "model"))
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+    run_dir = base_dir / model_name / timestamp
+    tcfg["output_dir"] = str(run_dir)
+    tcfg["_output_dir_resolved"] = True
+
+    return run_dir

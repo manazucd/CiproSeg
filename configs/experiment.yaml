@@ -3,7 +3,7 @@
 
 dataset:
   name: ciproseg_ecoli
-  root: "/home/manaz/git-projects/CiproSeg/Data/miniture_4_debug"
+  root: "/home/manaz/git-projects/CiproSeg/Data/original_size"
   train_frac: 0.8
   patch: 256
   stride: 128
@@ -15,7 +15,7 @@ model:
   base_channels: 64
 
 trainer:
-  epochs: 500
+  epochs: 10
   batch_size: 2
   num_workers: 0
   seed: 1234
@@ -30,7 +30,7 @@ trainer:
   cpu: false
 
   # where summaries + fold checkpoints go
-  output_dir: "runs/unet4"
+  output_dir: "runs"
 
 optim:
   name: adamw

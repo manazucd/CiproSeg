@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-21
-#  Last modified : 2026-02-25, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -167,7 +167,7 @@ def main() -> int:
     output_dir = _resolve_output_dir(args.input, args.output)
 
     logger.info("[infer] ============================================================")
-    logger.info(f"[infer] CiproSeg inference")
+    logger.info("[infer] CiproSeg inference")
     logger.info(f"[infer]   ckpt      : {args.ckpt}")
     logger.info(f"[infer]   input     : {args.input}")
     logger.info(f"[infer]   output    : {output_dir}")

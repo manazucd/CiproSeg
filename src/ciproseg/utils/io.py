@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-15
-#  Last modified : 2026-02-17
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -84,14 +84,33 @@ def _imread_gray_any(path: str) -> np.ndarray:
     return img
 
 
+def _dtype_max(img: np.ndarray) -> float:
+    """Return the theoretical maximum for the image's dtype."""
+    if img.dtype == np.uint8:
+        return 255.0
+    if img.dtype == np.uint16:
+        return 65535.0
+    if img.dtype == np.uint32:
+        return 4294967295.0
+    if img.dtype.kind == "f":
+        return 1.0
+
+    if np.issubdtype(img.dtype, np.integer):
+        return float(np.iinfo(img.dtype).max)
+    return 1.0
+
+
 def read_image_gray(path: str) -> np.ndarray:
     """Reads an image as float32 normalised to [0, 1]."""
-    img = _imread_gray_any(path).astype(np.float32)
+    img = _imread_gray_any(path)
     if img.size == 0:
-        return img
-    max_val = float(np.max(img))
-    if max_val > 1.0:
-        img /= max_val
+        return img.astype(np.float32)
+
+    divisor = _dtype_max(img)
+    img = img.astype(np.float32)
+    if divisor > 1.0:
+        img /= divisor
+
     return img
 
 

@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import torch
 
-from ciproseg.models.unet import UNet
+from ciproseg.models.unet2 import UNet2
+from ciproseg.models.unet4 import UNet4
 
-_MODEL = UNet(in_channels=1, out_channels=1, base_channels=16)
+_MODEL = UNet4(in_channels=1, out_channels=1, base_channels=16)
 
 
 def test_unet_forward_shape_logits() -> None:
