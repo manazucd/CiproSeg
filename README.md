@@ -137,6 +137,80 @@ runs/unet4/2026-04-03_153000/
 
 `config.yaml` is the experiment config as passed in. `config_resolved.yaml` includes all runtime overrides and the resolved output path. `train.log` contains the full training log (epoch losses, validation metrics, fold summaries). The fold directories each contain the best and latest checkpoints, JSON sidecars with metadata, and training curve plots.
 
+
+## Configuration Reference (`configs/experiment.yaml`)
+
+The experiment config is the single source of truth for a CiproSeg training run. All sections are described below.
+
+---
+
+### `dataset`
+
+| Field | Description |
+|---|---|
+| `name` | Dataset loader identifier. Currently only `ciproseg_ecoli` is supported. |
+| `root` | Absolute path to the dataset directory containing image/mask pairs. |
+| `train_frac` | Fraction of non-test frames used for training within each LOSO fold. The remainder becomes the validation set. |
+| `patch` | Crop size (pixels) for training patches. Must be divisible by 16 to satisfy U-Net pooling requirements. |
+| `stride` | Stride used during tiled inference on validation and test frames. Smaller values mean more overlap and smoother predictions but slower evaluation. |
+
+---
+
+### `model`
+
+| Field | Description |
+|---|---|
+| `name` | Architecture variant. `unet2` uses 2 encoder/decoder levels (lighter); `unet4` uses 4 levels (standard, recommended). |
+| `in_channels` | Number of input image channels. Set to `1` for grayscale microscopy. |
+| `out_channels` | Number of output channels. Set to `1` for binary segmentation. |
+| `base_channels` | Number of feature maps in the first encoder block. Doubles at each subsequent level. |
+
+---
+
+### `trainer`
+
+| Field | Description |
+|---|---|
+| `epochs` | Total number of training epochs per fold. |
+| `batch_size` | Number of patches per gradient update step. |
+| `num_workers` | DataLoader worker processes for parallel data loading. Set to `0` to load on the main process (useful for debugging). |
+| `seed` | Base random seed. Each fold derives its own seed as `seed + 1000 * fold_id` for reproducibility. |
+| `thr` | Sigmoid threshold for converting model logits to a binary mask during evaluation. |
+| `target_patches_per_epoch` | Controls how many random crops are sampled per epoch across all training frames. The per-frame crop count `K` is derived from this target. |
+| `deterministic` | If `true`, enables PyTorch deterministic mode for full reproducibility at the cost of some speed. |
+| `benchmark` | If `true`, enables `torch.backends.cudnn.benchmark` for faster training on fixed input sizes. Disable when input sizes vary. |
+| `cpu` | Force training on CPU even when a GPU is available. Useful for debugging. |
+| `output_dir` | Root directory for all training outputs. Each run creates a timestamped subdirectory containing fold checkpoints, curves, and the run summary. |
+
+---
+
+### `optim`
+
+| Field | Description |
+|---|---|
+| `name` | Optimizer name. `adamw` is the default and recommended choice. |
+| `lr` | Initial learning rate. |
+| `weight_decay` | L2 regularization coefficient applied to all non-bias parameters. |
+
+---
+
+### `sched`
+
+| Field | Description |
+|---|---|
+| `name` | Learning rate scheduler. Set to `none` to keep the learning rate constant. Supported alternatives include `cosine` (cosine annealing). |
+| `tmax` | (Cosine only) Number of epochs over which the learning rate anneals from `lr` to zero. |
+
+---
+
+### `logger`
+
+| Field | Description |
+|---|---|
+| `name` | Logger identifier used in log output. |
+| `level` | Logging verbosity. Standard Python logging levels apply: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+
+
 ## Evaluation
 
 Point `ciproseg-eval` at any checkpoint. Everything it needs (model architecture, weights, dataset root, fold identity) is stored inside the `.pt` file.

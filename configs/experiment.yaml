@@ -1,48 +1,40 @@
-# configs/experiment.yaml
-# Single source of truth for CiproSeg training (no DDP)
-
 dataset:
   name: ciproseg_ecoli
-  root: "/home/manaz/git-projects/CiproSeg/Data/original_size"
-  train_frac: 0.8
-  patch: 256
-  stride: 128
+  root: "/path/to/your/Data/original_size"
+  train_frac: 0.8         
+  patch: 256              
+  stride: 128             
 
 model:
-  name: unet4 # unet2 = 2 levels (smaller), unet4 = 4 levels (bigger)
-  in_channels: 1
-  out_channels: 1
-  base_channels: 64
+  name: unet4             
+  in_channels: 1          
+  out_channels: 1         
+  base_channels: 64       
 
 trainer:
-  epochs: 10
-  batch_size: 2
-  num_workers: 0
-  seed: 1234
-  thr: 0.5
-  target_patches_per_epoch: 1
+  epochs: 500             
+  batch_size: 8           
+  num_workers: 4          
+  seed: 1234              
+  thr: 0.5                
+  target_patches_per_epoch: 2000  
 
-  # reproducibility tradeoff
-  deterministic: false
-  benchmark: true
+  deterministic: false    
+  benchmark: true         
 
-  # force CPU if needed
-  cpu: false
-
-  # where summaries + fold checkpoints go
-  output_dir: "runs"
+  cpu: false              
+  output_dir: "runs"      
 
 optim:
-  name: adamw
-  lr: 1.0e-4
-  weight_decay: 1.0e-4
-
+  name: adamw             
+  lr: 3.0e-4                                       
+  weight_decay: 1.0e-2    
+                         
 sched:
-  name: none
-  # examples if you enable:
-  # name: cosine
-  # tmax: 40
-
+  name: cosine            
+  tmax: 500               
+                      
 logger:
   name: ciproseg
   level: INFO
+  
