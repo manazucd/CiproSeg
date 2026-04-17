@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-21
-#  Last modified : 2026-02-23, MK
+#  Last modified : 2026-04-07, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -109,11 +109,11 @@ def _make_diff_map(
     gt_binary_255: np.ndarray,
 ) -> np.ndarray:
     """
-    Produces a colour-coded difference map (H, W, 3) BGR uint8:
-        TP  -- green  (0, 200, 0)
-        FP  -- red    (0, 0, 220)     model predicted boundary where none exists
-        FN  -- blue   (220, 0, 0)     model missed a boundary
-        TN  -- near-black (20, 20, 20) background
+    Produces a colour-coded mask difference map (H, W, 3) in BGR uint8:
+        TP  -- green      (0, 200, 0)    predicted foreground and GT foreground
+        FP  -- red        (0, 0, 220)    predicted foreground where GT is background
+        FN  -- blue       (220, 0, 0)    GT foreground missed by prediction
+        TN  -- near-black (20, 20, 20)   background in both
     """
     pred = pred_binary_255 > 0
     gt = gt_binary_255 > 0

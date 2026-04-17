@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-15
-#  Last modified : 2026-04-05, MK
+#  Last modified : 2026-04-07, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -124,5 +124,5 @@ def _read_image_gray(path: str) -> np.ndarray:
     return img
 
 def read_mask_01(path: str) -> np.ndarray:
-    """Reads a mask as uint8 with values in {0, 1}; any non-zero pixel becomes 1."""
+    """Reads a mask as uint8 with values in {0,1}; pixels >= 128 become 1."""
     return (_imread_gray_any(path) >= 128).astype(np.uint8)

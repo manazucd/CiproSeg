@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # =======================================================================
 #  Project       : CiproSeg - LOSO U-Net Segmentation Framework
-#  File          : src/ciproseg/models/unet_small2.py
+#  File          : src/ciproseg/models/unet2.py
 #  Purpose       : Small 2-level U-Net (reduced capacity) for microscopy segmentation
 #
 #  Copyright (c) 2026 Manaz Kaleel
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
-#  Created on    : 2026-02-25, MK
-#  Last modified : 2026-02-25, MK
+#  Created on    : 2026-02-25
+#  Last modified : 2026-04-11, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg

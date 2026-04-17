@@ -53,3 +53,13 @@ slurm-*
 # Meta data and dev files
 # =========================
 *debug*
+
+# =========================
+# Under development
+# =========================
+gui/
+gui_cli.py
+README.md
+docs
+index.html
+*.css

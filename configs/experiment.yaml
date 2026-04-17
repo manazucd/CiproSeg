@@ -25,6 +25,11 @@ trainer:
   cpu: false              
   output_dir: "runs"      
 
+loss:
+  name: dice_bce
+  dice_weight: 0.5
+  bce_weight: 0.5
+
 optim:
   name: adamw             
   lr: 3.0e-4                                       
@@ -33,6 +38,7 @@ optim:
 sched:
   name: cosine            
   tmax: 500               
+  warmup_epochs: 10
                       
 logger:
   name: ciproseg

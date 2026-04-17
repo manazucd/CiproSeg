@@ -14,15 +14,21 @@ cd CiproSeg
 pip install -e .
 ```
 
-For development (adds pytest, ruff, mypy):
-
+For development tools (pytest, ruff, mypy):
 ```bash
 pip install -e ".[dev]"
 ```
 
+For the web-based GUI:
+```bash
+pip install -e ".[gui]"
+```
+
 Requires Python 3.9+ and PyTorch 2.2+. A CUDA GPU is recommended for training but not required.
 
-Verify it works:
+## Quick start
+
+Verify the installation:
 
 ```bash
 ciproseg-train --help
@@ -104,7 +110,7 @@ logger:
 ciproseg-train --config configs/experiment.yaml
 ```
 
-This builds a LOSO cross-validation loop: for N series, N folds run sequentially. Each fold trains on N−1 series (split 80/20 into train/val by time), then evaluates on the held-out series. Best checkpoints are selected by validation Dice.
+This builds a LOSO cross-validation loop: for N series, N folds run sequentially. Each fold trains on N-1 series (split 80/20 into train/val by time), then evaluates on the held-out series. Best checkpoints are selected by validation Dice.
 
 Override seed or force CPU from the command line:
 
@@ -137,80 +143,6 @@ runs/unet4/2026-04-03_153000/
 
 `config.yaml` is the experiment config as passed in. `config_resolved.yaml` includes all runtime overrides and the resolved output path. `train.log` contains the full training log (epoch losses, validation metrics, fold summaries). The fold directories each contain the best and latest checkpoints, JSON sidecars with metadata, and training curve plots.
 
-
-## Configuration Reference (`configs/experiment.yaml`)
-
-The experiment config is the single source of truth for a CiproSeg training run. All sections are described below.
-
----
-
-### `dataset`
-
-| Field | Description |
-|---|---|
-| `name` | Dataset loader identifier. Currently only `ciproseg_ecoli` is supported. |
-| `root` | Absolute path to the dataset directory containing image/mask pairs. |
-| `train_frac` | Fraction of non-test frames used for training within each LOSO fold. The remainder becomes the validation set. |
-| `patch` | Crop size (pixels) for training patches. Must be divisible by 16 to satisfy U-Net pooling requirements. |
-| `stride` | Stride used during tiled inference on validation and test frames. Smaller values mean more overlap and smoother predictions but slower evaluation. |
-
----
-
-### `model`
-
-| Field | Description |
-|---|---|
-| `name` | Architecture variant. `unet2` uses 2 encoder/decoder levels (lighter); `unet4` uses 4 levels (standard, recommended). |
-| `in_channels` | Number of input image channels. Set to `1` for grayscale microscopy. |
-| `out_channels` | Number of output channels. Set to `1` for binary segmentation. |
-| `base_channels` | Number of feature maps in the first encoder block. Doubles at each subsequent level. |
-
----
-
-### `trainer`
-
-| Field | Description |
-|---|---|
-| `epochs` | Total number of training epochs per fold. |
-| `batch_size` | Number of patches per gradient update step. |
-| `num_workers` | DataLoader worker processes for parallel data loading. Set to `0` to load on the main process (useful for debugging). |
-| `seed` | Base random seed. Each fold derives its own seed as `seed + 1000 * fold_id` for reproducibility. |
-| `thr` | Sigmoid threshold for converting model logits to a binary mask during evaluation. |
-| `target_patches_per_epoch` | Controls how many random crops are sampled per epoch across all training frames. The per-frame crop count `K` is derived from this target. |
-| `deterministic` | If `true`, enables PyTorch deterministic mode for full reproducibility at the cost of some speed. |
-| `benchmark` | If `true`, enables `torch.backends.cudnn.benchmark` for faster training on fixed input sizes. Disable when input sizes vary. |
-| `cpu` | Force training on CPU even when a GPU is available. Useful for debugging. |
-| `output_dir` | Root directory for all training outputs. Each run creates a timestamped subdirectory containing fold checkpoints, curves, and the run summary. |
-
----
-
-### `optim`
-
-| Field | Description |
-|---|---|
-| `name` | Optimizer name. `adamw` is the default and recommended choice. |
-| `lr` | Initial learning rate. |
-| `weight_decay` | L2 regularization coefficient applied to all non-bias parameters. |
-
----
-
-### `sched`
-
-| Field | Description |
-|---|---|
-| `name` | Learning rate scheduler. Set to `none` to keep the learning rate constant. Supported alternatives include `cosine` (cosine annealing). |
-| `tmax` | (Cosine only) Number of epochs over which the learning rate anneals from `lr` to zero. |
-
----
-
-### `logger`
-
-| Field | Description |
-|---|---|
-| `name` | Logger identifier used in log output. |
-| `level` | Logging verbosity. Standard Python logging levels apply: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-
-
 ## Evaluation
 
 Point `ciproseg-eval` at any checkpoint. Everything it needs (model architecture, weights, dataset root, fold identity) is stored inside the `.pt` file.
@@ -222,17 +154,17 @@ ciproseg-eval --ckpt runs/unet4/2026-04-03_153000/fold_01_test_seriesA/best.pt
 Output:
 
 ```
-────────────────────────────────────────────────────────────
+------------------------------------------------------------
   Checkpoint : runs/.../fold_01_test_seriesA/best.pt
   Fold       : fold_01_test_seriesA
   Test series: seriesA
-────────────────────────────────────────────────────────────
+------------------------------------------------------------
   Dice       : 0.8234
   IoU        : 0.7012
   Precision  : 0.8456
   Recall     : 0.8019
   Loss (BCE) : 0.14523
-────────────────────────────────────────────────────────────
+------------------------------------------------------------
 ```
 
 Useful flags:
@@ -291,6 +223,90 @@ ciproseg-infer \
 
 Other options: `--cpu`, `--device cuda:1`, `--verbose`.
 
+## Web GUI
+
+CiproSeg ships with an optional browser-based interface for users who prefer not to work from the command line. The GUI wraps the same CLI commands described above; it does not replace them.
+
+```bash
+ciproseg-gui
+```
+
+This opens a browser tab at `http://127.0.0.1:7860` with pages for training configuration, live training monitoring, evaluation, inference with side-by-side image viewing, results browsing, and cross-fold comparison.
+
+On launch, the GUI loads `configs/experiment.yaml` (if present) and populates the form fields automatically. All training, evaluation, and inference parameters can be edited directly in the browser without touching any YAML files.
+
+A few other options:
+
+```bash
+ciproseg-gui --port 8080            # custom port
+ciproseg-gui --no-browser           # skip auto-opening the browser
+ciproseg-gui --host 0.0.0.0        # bind to all interfaces (remote access)
+```
+
+If a port is already in use (e.g. another GUI instance is running), the server automatically finds the next available port. Multiple instances can run side by side without manual port management.
+
+The GUI requires the `[gui]` optional dependencies (`fastapi`, `uvicorn`). If these are not installed, the core CLI tools remain fully functional.
+
+## Configuration reference
+
+The experiment config is the single source of truth for a CiproSeg training run. All sections are described below.
+
+### `dataset`
+
+| Field | Description |
+|---|---|
+| `name` | Dataset loader identifier. Currently only `ciproseg_ecoli` is supported. |
+| `root` | Absolute path to the dataset directory containing image/mask pairs. |
+| `train_frac` | Fraction of non-test frames used for training within each LOSO fold. The remainder becomes the validation set. |
+| `patch` | Crop size (pixels) for training patches. Must be divisible by 16 to satisfy U-Net pooling requirements. |
+| `stride` | Stride used during tiled inference on validation and test frames. Smaller values mean more overlap and smoother predictions but slower evaluation. |
+
+### `model`
+
+| Field | Description |
+|---|---|
+| `name` | Architecture variant. `unet2` uses 2 encoder/decoder levels (lighter); `unet4` uses 4 levels (standard, recommended). |
+| `in_channels` | Number of input image channels. Set to `1` for grayscale microscopy. |
+| `out_channels` | Number of output channels. Set to `1` for binary segmentation. |
+| `base_channels` | Number of feature maps in the first encoder block. Doubles at each subsequent level. |
+
+### `trainer`
+
+| Field | Description |
+|---|---|
+| `epochs` | Total number of training epochs per fold. |
+| `batch_size` | Number of patches per gradient update step. |
+| `num_workers` | DataLoader worker processes for parallel data loading. Set to `0` to load on the main process (useful for debugging). |
+| `seed` | Base random seed. Each fold derives its own seed as `seed + 1000 * fold_id` for reproducibility. |
+| `thr` | Sigmoid threshold for converting model logits to a binary mask during evaluation. |
+| `target_patches_per_epoch` | Controls how many random crops are sampled per epoch across all training frames. The per-frame crop count is derived from this target. |
+| `deterministic` | If `true`, enables PyTorch deterministic mode for full reproducibility at the cost of some speed. |
+| `benchmark` | If `true`, enables `torch.backends.cudnn.benchmark` for faster training on fixed input sizes. Disable when input sizes vary. |
+| `cpu` | Force training on CPU even when a GPU is available. Useful for debugging. |
+| `output_dir` | Root directory for all training outputs. Each run creates a timestamped subdirectory containing fold checkpoints, curves, and the run summary. |
+
+### `optim`
+
+| Field | Description |
+|---|---|
+| `name` | Optimizer name. `adamw` is the default and recommended choice. |
+| `lr` | Initial learning rate. |
+| `weight_decay` | L2 regularization coefficient applied to all non-bias parameters. |
+
+### `sched`
+
+| Field | Description |
+|---|---|
+| `name` | Learning rate scheduler. Set to `none` to keep the learning rate constant. Supported alternatives include `cosine` (cosine annealing). |
+| `tmax` | (Cosine only) Number of epochs over which the learning rate anneals from `lr` to zero. |
+
+### `logger`
+
+| Field | Description |
+|---|---|
+| `name` | Logger identifier used in log output. |
+| `level` | Logging verbosity. Standard Python logging levels apply: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+
 ## SLURM
 
 Job scripts are provided in `scripts/` for HPC clusters:
@@ -300,7 +316,7 @@ sbatch scripts/slurm_gpu.sh    # GPU partition
 sbatch scripts/slurm_cpu.sh    # CPU-only partition
 ```
 
-Submit from the project root or the `scripts/` directory, the scripts auto-detect the project location. Training output goes to `train.log` inside the timestamped run directory; SLURM's own `slurm-<jobid>.out` catches system-level messages (driver errors, OOM kills).
+Submit from the project root or the `scripts/` directory; the scripts auto-detect the project location. Training output goes to `train.log` inside the timestamped run directory. SLURM's own `slurm-<jobid>.out` catches system-level messages (driver errors, OOM kills).
 
 ## Testing
 
@@ -321,7 +337,7 @@ mypy src/
 
 **Trainer** owns the full LOSO loop: builds the dataset index, creates N folds, trains each fold with per-epoch logging, selects checkpoints by validation Dice, and runs final test evaluation on the held-out series. Each fold gets a deterministic seed derived from the base seed.
 
-**Evaluator** (`evaluate_checkpoint`) is a standalone function. It loads a checkpoint, rebuilds the model from the config stored inside it, identifies the held-out test series from the fold name, and runs tiled inference. No config file needed, the checkpoint is self-contained.
+**Evaluator** (`evaluate_checkpoint`) is a standalone function. It loads a checkpoint, rebuilds the model from the config stored inside it, identifies the held-out test series from the fold name, and runs tiled inference. No config file needed; the checkpoint is self-contained.
 
 **Checkpointer** handles atomic file writes (temp file + `os.replace`) for both fold-level checkpoints and the run summary. JSON sidecars carry metadata without requiring `torch.load` to browse results.
 
@@ -329,10 +345,11 @@ mypy src/
 
 ## Design choices
 
-- **Single GPU only.** No DDP, no torchrun, no DeepSpeed. This keeps the code simple and the experiments reproducible. If you need multi-GPU, this isn't the right tool.
+- **Single GPU only.** No DDP, no torchrun, no DeepSpeed. This keeps the code simple and the experiments reproducible. If you need multi-GPU, this is not the right tool.
 - **No mid-fold resume.** Checkpoints are saved per fold, but training always restarts from fold 1. LOSO folds are fast enough on a single GPU that this is rarely a problem.
 - **Self-contained checkpoints.** Every `.pt` file stores the full config, model weights, optimizer state, and fold metadata. You can evaluate or run inference months later without hunting for the original config file.
 - **Timestamp-based run directories.** Each training run gets a unique directory (`runs/model/YYYY-MM-DD_HHMMSS/`). Nothing is ever overwritten.
+- **Decoupled GUI.** The web interface is entirely optional and calls the CLI tools as subprocesses. If the GUI is not installed, corrupted, or otherwise unavailable, all core functionality works from the command line exactly as documented above.
 
 ## Citation
 
