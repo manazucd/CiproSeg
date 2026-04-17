@@ -25,11 +25,11 @@ import numpy as np
 
 import torch
 import gc
-import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from ..models import build_model_from_cfg
 from ..optim.optimizers import build_optimizer
+from ..optim.losses import build_criterion
 from ..optim.schedulers import build_scheduler, SchedulerBundle
 from ..utils.seed import seed_everything
 from ..utils.checkpoint import Checkpointer
@@ -131,7 +131,7 @@ class Trainer:
             seed_everything(fold_seed, deterministic=self.deterministic, benchmark=self.benchmark)
 
             model = build_model_from_cfg(self.cfg).to(self.device)
-            criterion = nn.BCEWithLogitsLoss()
+            criterion = build_criterion(self.cfg)
 
             K = default_crops_per_frame(
                 num_train_frames=len(train_frames),

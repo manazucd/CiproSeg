@@ -24,10 +24,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import matplotlib
-
-if not os.environ.get("DISPLAY"):
-    matplotlib.use("Agg", force=True)
-
+matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
 @dataclass(frozen=True)

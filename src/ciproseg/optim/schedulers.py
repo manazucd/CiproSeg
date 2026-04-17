@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-15, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -43,6 +43,7 @@ def build_scheduler(
             name: cosine       # or step / onecycle
             tmax: 40
             eta_min: 0.0
+            warmup_epochs: 10  # optional linear warmup (cosine and step only)
     """
     scfg = cfg.get("sched") or {}
     name = str(scfg.get("name", "none")).lower()
@@ -51,11 +52,26 @@ def build_scheduler(
         return None
 
     if name == "cosine":
-        sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+        cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=int(scfg.get("tmax", epochs if epochs is not None else 100)),
             eta_min=float(scfg.get("eta_min", 0.0)),
         )
+        warmup_epochs = int(scfg.get("warmup_epochs", 0))
+        if warmup_epochs > 0:
+            warmup = torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=1e-3,
+                end_factor=1.0,
+                total_iters=warmup_epochs,
+            )
+            sched = torch.optim.lr_scheduler.SequentialLR(
+                optimizer,
+                schedulers=[warmup, cosine],
+                milestones=[warmup_epochs],
+            )
+        else:
+            sched = cosine
         return SchedulerBundle(scheduler=sched, interval="epoch")
 
     if name == "step":

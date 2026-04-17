@@ -60,6 +60,7 @@ slurm-*
 gui/
 gui_cli.py
 README.md
+GUI_README.md
 docs
 index.html
 *.css

@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-15, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -33,6 +33,36 @@ def compute_boundary_map(mask01: np.ndarray, ksize: int = 3) -> np.ndarray:
     return (grad > 0).astype(np.uint8)
 
 
+def _elastic_deform(
+    img: np.ndarray,
+    mask01: np.ndarray,
+    alpha: float = 80.0,
+    sigma: float = 10.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply random elastic deformation to an image/mask pair."""
+    h, w = img.shape[:2]
+    dx = cv2.GaussianBlur(
+        (np.random.rand(h, w).astype(np.float32) * 2 - 1),
+        ksize=(0, 0),
+        sigmaX=sigma,
+    ) * alpha
+    dy = cv2.GaussianBlur(
+        (np.random.rand(h, w).astype(np.float32) * 2 - 1),
+        ksize=(0, 0),
+        sigmaX=sigma,
+    ) * alpha
+
+    x_coords, y_coords = np.meshgrid(np.arange(w), np.arange(h))
+    map_x = (x_coords + dx).astype(np.float32)
+    map_y = (y_coords + dy).astype(np.float32)
+
+    img = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_REFLECT_101)
+    mask01 = cv2.remap(mask01, map_x, map_y, interpolation=cv2.INTER_NEAREST,
+                       borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    return img, mask01
+
+
 def augment_pair(img: np.ndarray, mask01: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Geometric and photometric augmentation applied consistently to an image/mask pair."""
     if random.random() < 0.5:
@@ -46,6 +76,9 @@ def augment_pair(img: np.ndarray, mask01: np.ndarray) -> Tuple[np.ndarray, np.nd
         img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
         mask01 = cv2.warpAffine(mask01, M, (w, h), flags=cv2.INTER_NEAREST,
                                 borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+    if random.random() < 0.3:
+        img, mask01 = _elastic_deform(img, mask01)
 
     if random.random() < 0.7:
         img = np.clip(random.uniform(0.9, 1.1) * img + random.uniform(-0.05, 0.05), 0.0, 1.0)

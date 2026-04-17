@@ -16,7 +16,8 @@
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
 
+from .losses import build_criterion
 from .optimizers import build_optimizer
 from .schedulers import build_scheduler
 
-__all__ = ["build_optimizer", "build_scheduler"]
+__all__ = ["build_criterion", "build_optimizer", "build_scheduler"]
