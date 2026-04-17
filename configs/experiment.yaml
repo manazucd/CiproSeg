@@ -1,9 +1,9 @@
 dataset:
   name: ciproseg_ecoli
-  root: "/home/manaz/git-projects/CiproSeg/Data/miniture_4_debug"
+  root: "/cta/users/miray.palaz/CiproSeg/dataset_18-03-2026"
   train_frac: 0.8         
-  patch: 16        # was 256      
-  stride: 8             # was 128
+  patch: 256      
+  stride: 128
 
 model:
   name: unet4             
@@ -12,12 +12,12 @@ model:
   base_channels: 64       
 
 trainer:
-  epochs: 20   # was 500          
+  epochs: 500          
   batch_size: 8           
   num_workers: 4          
   seed: 1234              
   thr: 0.5                
-  target_patches_per_epoch: 1  # was 2000
+  target_patches_per_epoch: 2000
 
   deterministic: false    
   benchmark: true         
