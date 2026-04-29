@@ -10,10 +10,34 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-04-29, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
 
-from .segmentation import dice_from_probs, iou_from_probs, precision_from_probs, recall_from_probs
+from .segmentation import (
+    dice_from_probs,
+    iou_from_probs,
+    precision_from_probs,
+    recall_from_probs,
+    evaluate_full_image_numpy,
+)
+from .objects import (
+    ObjectMetrics,
+    label_components,
+    compute_object_metrics,
+    aggregate_object_metrics,
+)
+
+__all__ = [
+    "dice_from_probs",
+    "iou_from_probs",
+    "precision_from_probs",
+    "recall_from_probs",
+    "evaluate_full_image_numpy",
+    "ObjectMetrics",
+    "label_components",
+    "compute_object_metrics",
+    "aggregate_object_metrics",
+]

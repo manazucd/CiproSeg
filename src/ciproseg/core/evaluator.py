@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-04-03, MK
+#  Last modified : 2026-04-29, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -33,9 +33,21 @@ from ..data.datasets.ciproseg_ecoli import (
     pad_to_patch,
 )
 from ..metrics.segmentation import evaluate_full_image_numpy
+from ..metrics.objects import compute_object_metrics, aggregate_object_metrics
 from ..models import build_model_from_cfg
 from ..utils.logger import get_logger
 from .hooks import HookList
+
+
+# Default thresholds swept over when find_best_threshold is asked to
+# choose its own grid. Range chosen to bracket the empirically observed
+# optimal thresholds for CiproSeg (0.40 to 0.55).
+_DEFAULT_THRESHOLD_GRID = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60)
+
+# Mask binarisation threshold. Project convention: mask pixel values in
+# 1..50 are treated as background (CiproSeg quirk). 128 is the safe cutoff.
+_MASK_BIN_THRESHOLD = 128
+
 
 def tile_positions(h: int, w: int, patch: int, stride: int) -> List[Tuple[int, int]]:
     """Deterministic (x, y) top-left tile positions that fully cover the image."""
@@ -84,6 +96,76 @@ def predict_full_mask_tiled(
     return acc / np.maximum(wgt, 1e-8)
 
 
+# Forward and inverse D4 group operations. Each forward op transforms
+# the input image, each inverse op transforms a probability map back to
+# the original orientation. Pairs are matched by index.
+_TTA_FORWARD = (
+    lambda a: a,
+    lambda a: np.fliplr(a).copy(),
+    lambda a: np.flipud(a).copy(),
+    lambda a: np.flipud(np.fliplr(a)).copy(),
+    lambda a: np.rot90(a, 1).copy(),
+    lambda a: np.fliplr(np.rot90(a, 1)).copy(),
+    lambda a: np.rot90(a, 2).copy(),
+    lambda a: np.rot90(a, 3).copy(),
+)
+_TTA_INVERSE = (
+    lambda a: a,
+    lambda a: np.fliplr(a).copy(),
+    lambda a: np.flipud(a).copy(),
+    lambda a: np.fliplr(np.flipud(a)).copy(),
+    lambda a: np.rot90(a, -1).copy(),
+    lambda a: np.rot90(np.fliplr(a), -1).copy(),
+    lambda a: np.rot90(a, -2).copy(),
+    lambda a: np.rot90(a, -3).copy(),
+)
+
+
+@torch.no_grad()
+def predict_full_mask_tta(
+    model: nn.Module,
+    img_gray01: np.ndarray,
+    patch: int = 256,
+    stride: int = 128,
+    device: str = "cuda",
+) -> np.ndarray:
+    """
+    Test-time augmentation over the D4 symmetry group.
+
+    Runs tiled inference 8 times, once for each (rotation x flip)
+    transform, inverts the transform on each output probability map,
+    and averages the 8 maps. Output shape matches the input.
+    """
+    if img_gray01.ndim != 2:
+        raise ValueError(f"img_gray01 must be 2D, got {img_gray01.shape}")
+    if len(_TTA_FORWARD) != len(_TTA_INVERSE):
+        raise RuntimeError("TTA forward/inverse op count mismatch")
+
+    h, w = img_gray01.shape
+    acc = np.zeros((h, w), dtype=np.float32)
+
+    for fwd, inv in zip(_TTA_FORWARD, _TTA_INVERSE):
+        view = fwd(img_gray01)
+        prob = predict_full_mask_tiled(model, view, patch=patch, stride=stride, device=device)
+        acc += inv(prob)
+
+    return acc / float(len(_TTA_FORWARD))
+
+
+def _predict_one(
+    model: nn.Module,
+    img: np.ndarray,
+    patch: int,
+    stride: int,
+    device: str,
+    use_tta: bool,
+) -> np.ndarray:
+    """Dispatch to TTA or plain tiled inference."""
+    if use_tta:
+        return predict_full_mask_tta(model, img, patch=patch, stride=stride, device=device)
+    return predict_full_mask_tiled(model, img, patch=patch, stride=stride, device=device)
+
+
 @torch.no_grad()
 def evaluate_series_full(
     model: nn.Module,
@@ -93,11 +175,14 @@ def evaluate_series_full(
     device: str,
     thr: float = 0.5,
     compute_loss: bool = False,
+    use_tta: bool = False,
     eps: float = 1e-7,
 ) -> Dict[str, float]:
     """
     Tiled full image evaluation across a list of frames; returns averaged metrics.
-    When compute_loss=True, also returns mean per-pixel BCE on probabilities.
+
+    When compute_loss is True, also returns mean per-pixel BCE on probabilities.
+    When use_tta is True, runs D4 test-time augmentation (8x slower).
     """
     if not frames:
         out: Dict[str, float] = {"dice": 0.0, "iou": 0.0, "precision": 0.0, "recall": 0.0}
@@ -110,7 +195,7 @@ def evaluate_series_full(
     for it in frames:
         img = read_image_gray(it.img_path)
         mask = read_mask_01(it.mask_path).astype(np.float32)
-        prob = predict_full_mask_tiled(model, img, patch=patch, stride=stride, device=device)
+        prob = _predict_one(model, img, patch, stride, device, use_tta)
 
         met = evaluate_full_image_numpy(prob, mask, thr=thr)
         dices.append(met["dice"])
@@ -134,21 +219,144 @@ def evaluate_series_full(
     return out
 
 
+@torch.no_grad()
+def evaluate_with_threshold_sweep(
+    model: nn.Module,
+    frames: List[FrameItem],
+    patch: int,
+    stride: int,
+    device: str,
+    thresholds: Sequence[float] = _DEFAULT_THRESHOLD_GRID,
+    use_tta: bool = False,
+) -> Dict[float, Dict[str, float]]:
+    """
+    Run inference once per frame, score under multiple thresholds.
+
+    Returns a mapping threshold -> {dice, iou, precision, recall}.
+    Probability maps are computed once and reused across thresholds.
+    """
+    if not frames:
+        return {float(t): {"dice": 0.0, "iou": 0.0, "precision": 0.0, "recall": 0.0}
+                for t in thresholds}
+    if not thresholds:
+        raise ValueError("thresholds must contain at least one value")
+
+    accumulators: Dict[float, Dict[str, List[float]]] = {
+        float(t): {"dice": [], "iou": [], "precision": [], "recall": []}
+        for t in thresholds
+    }
+
+    for it in frames:
+        img = read_image_gray(it.img_path)
+        mask = read_mask_01(it.mask_path).astype(np.float32)
+        prob = _predict_one(model, img, patch, stride, device, use_tta)
+
+        for t in thresholds:
+            met = evaluate_full_image_numpy(prob, mask, thr=float(t))
+            accumulators[float(t)]["dice"].append(met["dice"])
+            accumulators[float(t)]["iou"].append(met["iou"])
+            accumulators[float(t)]["precision"].append(met["precision"])
+            accumulators[float(t)]["recall"].append(met["recall"])
+
+    return {
+        t: {k: float(np.mean(v)) for k, v in metrics.items()}
+        for t, metrics in accumulators.items()
+    }
+
+
+def find_best_threshold(
+    sweep_result: Dict[float, Dict[str, float]],
+    metric: str = "dice",
+) -> Tuple[float, Dict[str, float]]:
+    """
+    Pick the threshold that maximises the chosen metric in a sweep result.
+
+    Returns (best_threshold, metrics_at_best).
+    """
+    if not sweep_result:
+        raise ValueError("sweep_result is empty")
+    if metric not in next(iter(sweep_result.values())):
+        raise ValueError(
+            f"metric '{metric}' not in sweep result keys: "
+            f"{list(next(iter(sweep_result.values())).keys())}"
+        )
+
+    best_t = max(sweep_result.keys(), key=lambda t: sweep_result[t][metric])
+    return float(best_t), dict(sweep_result[best_t])
+
+
+@torch.no_grad()
+def evaluate_with_object_metrics(
+    model: nn.Module,
+    frames: List[FrameItem],
+    patch: int,
+    stride: int,
+    device: str,
+    thr: float,
+    use_tta: bool = False,
+    iou_threshold: float = 0.5,
+) -> Dict[str, float]:
+    """
+    Full evaluation including pixel and object-level metrics.
+
+    Returns the standard pixel metrics (dice, iou, precision, recall)
+    plus object-level metrics (obj_precision, obj_recall, obj_f1,
+    obj_splits, obj_merges, obj_tp, obj_fp, obj_fn).
+    """
+    if not frames:
+        out = {"dice": 0.0, "iou": 0.0, "precision": 0.0, "recall": 0.0}
+        out.update(aggregate_object_metrics([]))
+        return out
+
+    dices, ious, precs, recs = [], [], [], []
+    object_metrics_per_image = []
+
+    for it in frames:
+        img = read_image_gray(it.img_path)
+        mask = read_mask_01(it.mask_path).astype(np.float32)
+        prob = _predict_one(model, img, patch, stride, device, use_tta)
+
+        met = evaluate_full_image_numpy(prob, mask, thr=thr)
+        dices.append(met["dice"])
+        ious.append(met["iou"])
+        precs.append(met["precision"])
+        recs.append(met["recall"])
+
+        pred_bin = (prob >= thr).astype(np.uint8)
+        gt_bin = (mask >= (_MASK_BIN_THRESHOLD / 255.0)).astype(np.uint8)
+        # mask values from read_mask_01 are already in {0, 1}; the >=
+        # comparison above is a no-op safeguard for any caller passing
+        # a uint8 mask through.
+        object_metrics_per_image.append(
+            compute_object_metrics(pred_bin, gt_bin, iou_threshold=iou_threshold)
+        )
+
+    out = {
+        "dice": float(np.mean(dices)),
+        "iou": float(np.mean(ious)),
+        "precision": float(np.mean(precs)),
+        "recall": float(np.mean(recs)),
+    }
+    out.update(aggregate_object_metrics(object_metrics_per_image))
+    return out
+
+
 _FOLD_RE = re.compile(r"^fold_\d+_test_(.+)$")
+
 
 def _extract_test_series(fold_name: str, available: List[str]) -> Optional[str]:
     """
     Extract the test series name from a fold_name string and verify it
-    exists in the dataset index.  Returns None on failure.
+    exists in the dataset index. Returns None on failure.
     """
     m = _FOLD_RE.match(fold_name)
     if m and m.group(1) in available:
         return m.group(1)
-    # Fallback: check if any known series name is a suffix of fold_name.
     for s in available:
         if fold_name.endswith(s):
             return s
     return None
+
 
 def evaluate_checkpoint(
     ckpt_path: str,
@@ -158,16 +366,19 @@ def evaluate_checkpoint(
     stride: Optional[int] = None,
     thr: float = 0.5,
     device: Optional[str] = None,
+    use_tta: bool = False,
+    compute_object_metrics_flag: bool = False,
 ) -> Dict[str, float]:
     """
     Evaluate a single CiproSeg checkpoint on its LOSO held-out test series.
 
     Everything needed (model architecture, weights, dataset root, fold
-    identity) is read from the checkpoint.  Optional keyword arguments
-    let the caller override dataset_root / patch / stride / device if the
-    data has moved or different tiling is desired.
+    identity) is read from the checkpoint. Optional keyword arguments
+    let the caller override dataset_root / patch / stride / device, and
+    enable TTA or object-level metrics for the final evaluation.
 
     Returns a dict with dice, iou, precision, recall (and loss).
+    Object metrics are also returned when compute_object_metrics_flag=True.
     """
     logger = get_logger()
 
@@ -211,11 +422,13 @@ def evaluate_checkpoint(
     model.to(_device).eval()
 
     logger.info(
-        "[Evaluator] Loaded %s  (fold=%s, best_val=%.4f, device=%s)",
+        "[Evaluator] Loaded %s  (fold=%s, best_val=%.4f, device=%s, tta=%s, obj=%s)",
         ckpt_path,
         fold_name,
         float(state.get("best_val_metric", float("nan"))),
         _device,
+        use_tta,
+        compute_object_metrics_flag,
     )
 
     index = build_index(_dataset_root)
@@ -237,19 +450,32 @@ def evaluate_checkpoint(
     )
 
     with torch.inference_mode():
-        metrics = evaluate_series_full(
-            model,
-            test_frames,
-            patch=_patch,
-            stride=_stride,
-            device=_device,
-            thr=thr,
-            compute_loss=True,
-        )
+        if compute_object_metrics_flag:
+            metrics = evaluate_with_object_metrics(
+                model,
+                test_frames,
+                patch=_patch,
+                stride=_stride,
+                device=_device,
+                thr=thr,
+                use_tta=use_tta,
+            )
+        else:
+            metrics = evaluate_series_full(
+                model,
+                test_frames,
+                patch=_patch,
+                stride=_stride,
+                device=_device,
+                thr=thr,
+                compute_loss=True,
+                use_tta=use_tta,
+            )
 
     metrics["fold_name"] = fold_name
     metrics["test_series"] = test_series
     metrics["ckpt_path"] = ckpt_path
+    metrics["thr"] = float(thr)
 
     logger.info(
         "[Evaluator] %s  dice=%.4f  iou=%.4f  prec=%.4f  rec=%.4f",
@@ -260,6 +486,7 @@ def evaluate_checkpoint(
         metrics["recall"],
     )
     return metrics
+
 
 class Evaluator:
     """
@@ -277,14 +504,19 @@ class Evaluator:
         self.datamodule = datamodule
         self.hooks = hooks or HookList([])
         self.logger = get_logger()
-    
+
     def evaluate(self, ckpt_path: Optional[str] = None) -> Dict[str, float]:
         if ckpt_path is None:
             raise ValueError(
                 "No checkpoint path provided. Use: ciproseg-eval --ckpt <path/to/best.pt>"
             )
-        return evaluate_checkpoint(ckpt_path)
+        ecfg = self.cfg.get("eval") or {}
+        return evaluate_checkpoint(
+            ckpt_path,
+            thr=float(ecfg.get("thr", 0.5)),
+            use_tta=bool(ecfg.get("tta", False)),
+            compute_object_metrics_flag=bool(ecfg.get("object_metrics", False)),
+        )
 
     def test(self, ckpt_path: Optional[str] = None) -> Dict[str, float]:
         return self.evaluate(ckpt_path=ckpt_path)
-    

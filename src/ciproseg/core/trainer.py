@@ -10,21 +10,21 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-04-03, MK
+#  Last modified : 2026-04-29, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
 import torch
-import gc
 from torch.utils.data import DataLoader
 
 from ..models import build_model_from_cfg
@@ -33,6 +33,7 @@ from ..optim.losses import build_criterion
 from ..optim.schedulers import build_scheduler, SchedulerBundle
 from ..utils.seed import seed_everything
 from ..utils.checkpoint import Checkpointer
+from ..utils.logger import get_logger
 from ..data.collate import segmentation_collate_fn
 from ..data.datasets.ciproseg_ecoli import (
     build_index,
@@ -41,11 +42,25 @@ from ..data.datasets.ciproseg_ecoli import (
     RandomCropSegDataset,
     default_crops_per_frame,
 )
-from .evaluator import evaluate_series_full
+from .evaluator import (
+    evaluate_series_full,
+    evaluate_with_threshold_sweep,
+    evaluate_with_object_metrics,
+    find_best_threshold,
+)
 from .hooks import HookList
 from ..visualization.plot_curves import Curve, FoldCurves, plot_fold_curves
 
+
 _METRIC_KEYS = ("dice", "iou", "precision", "recall")
+
+# Validation cadence: the trainer evaluates the model every N epochs
+# rather than every epoch. Keeps wallclock cost down on long runs.
+_VAL_EVERY_N_EPOCHS = 10
+
+# Default threshold grid swept on val before running the final test.
+# Range chosen to bracket the empirically observed CiproSeg optima.
+_DEFAULT_THRESHOLD_GRID = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60)
 
 
 class Trainer:
@@ -68,6 +83,7 @@ class Trainer:
         self.cfg = cfg
         self.datamodule = datamodule
         self.hooks = hooks or HookList([])
+        self.logger = get_logger()
 
         self.run_dir = resolve_run_output_dir(self.cfg)
         self.ckpt = Checkpointer(self.cfg)
@@ -88,9 +104,33 @@ class Trainer:
         self.deterministic = bool(tcfg.get("deterministic", False))
         self.benchmark = bool(tcfg.get("benchmark", True))
 
+        # New options. All default to current behaviour, so existing
+        # configs continue to run unchanged.
+        self.early_stop_patience = tcfg.get("early_stop_patience", None)
+        if self.early_stop_patience is not None:
+            self.early_stop_patience = int(self.early_stop_patience)
+            if self.early_stop_patience <= 0:
+                raise ValueError(
+                    f"early_stop_patience must be > 0, got {self.early_stop_patience}"
+                )
+
+        self.use_amp = bool(tcfg.get("amp", False))
+
+        sweep_cfg = tcfg.get("threshold_sweep", None)
+        self.threshold_sweep = self._resolve_threshold_sweep(sweep_cfg)
+
+        self.test_tta = bool(tcfg.get("test_tta", False))
+        self.compute_test_object_metrics = bool(tcfg.get("compute_object_metrics", False))
+
         force_cpu = bool(tcfg.get("cpu", False))
         use_cuda = (not force_cpu) and torch.cuda.is_available() and (torch.cuda.device_count() > 0)
         self.device = "cuda" if use_cuda else "cpu"
+
+        if self.use_amp and self.device != "cuda":
+            self.logger.warning(
+                "[Trainer] AMP requested but device is CPU; disabling AMP."
+            )
+            self.use_amp = False
 
         mname = (self.cfg.get("model") or {}).get("name", "")
         req = 16 if mname == "unet4" else 4
@@ -100,6 +140,34 @@ class Trainer:
         self.best_metric: float = float("-inf")
         self.last_metrics: Dict[str, float] = {}
         self.fold_results: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _resolve_threshold_sweep(sweep_cfg: Any) -> Optional[Sequence[float]]:
+        """
+        Normalise the trainer.threshold_sweep config option.
+
+        Accepted forms:
+            None / False              -> no sweep, use fixed thr
+            True                      -> sweep over the default grid
+            list/tuple of numbers     -> sweep over the given values
+        """
+        if sweep_cfg is None or sweep_cfg is False:
+            return None
+        if sweep_cfg is True:
+            return _DEFAULT_THRESHOLD_GRID
+        if isinstance(sweep_cfg, (list, tuple)):
+            values = [float(v) for v in sweep_cfg]
+            if not values:
+                raise ValueError("threshold_sweep list is empty")
+            for v in values:
+                if not (0.0 < v < 1.0):
+                    raise ValueError(
+                        f"threshold_sweep values must be in (0, 1), got {v}"
+                    )
+            return tuple(values)
+        raise ValueError(
+            f"Unsupported threshold_sweep value: {sweep_cfg!r}"
+        )
 
     def train(self, start_state: Optional[Dict[str, Any]] = None) -> None:
         _ = start_state
@@ -165,7 +233,11 @@ class Trainer:
                 epochs=self.epochs,
             )
 
-            state: Dict[str, Any] = {
+            # AMP scaler. Disabled scaler is a cheap no-op so we always
+            # construct one and let `enabled` toggle the behaviour.
+            scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
+
+            state = {
                 "cfg": self.cfg,
                 "fold_id": fold_id,
                 "fold_name": fold_name,
@@ -178,6 +250,8 @@ class Trainer:
                 "epochs": self.epochs,
                 "batch_size": self.batch_size,
                 "device": self.device,
+                "amp": self.use_amp,
+                "early_stop_patience": self.early_stop_patience,
                 "optim": cfg_section(self.cfg, "optim"),
                 "sched": cfg_section(self.cfg, "sched"),
                 "lr": float(opt.param_groups[0].get("lr", 0.0)),
@@ -186,6 +260,8 @@ class Trainer:
 
             best_val_dice = float("-inf")
             best_state: Optional[Dict[str, torch.Tensor]] = None
+            best_epoch = 0
+            stopped_early = False
 
             loss_epochs: List[int] = []
             loss_train: List[float] = []
@@ -211,9 +287,14 @@ class Trainer:
                     yb = batch["y"].to(self.device, non_blocking=True)
 
                     opt.zero_grad(set_to_none=True)
-                    loss = criterion(model(xb), yb)
-                    loss.backward()
-                    opt.step()
+
+                    with torch.amp.autocast(device_type="cuda", enabled=self.use_amp):
+                        logits = model(xb)
+                        loss = criterion(logits, yb)
+
+                    scaler.scale(loss).backward()
+                    scaler.step(opt)
+                    scaler.update()
 
                     if sched_bundle is not None and sched_bundle.interval == "step":
                         sched_bundle.scheduler.step()
@@ -226,9 +307,11 @@ class Trainer:
 
                 state["train_loss"] = running_loss / max(1, len(train_loader))
                 state["lr"] = float(opt.param_groups[0].get("lr", 0.0))
-                state["is_eval_epoch"] = (ep % 10 == 0) or (ep == self.epochs)
 
-                if (ep % 10 == 0) or (ep == self.epochs):
+                is_eval_epoch = (ep % _VAL_EVERY_N_EPOCHS == 0) or (ep == self.epochs)
+                state["is_eval_epoch"] = is_eval_epoch
+
+                if is_eval_epoch:
 
                     with torch.inference_mode():
                         val_metrics = evaluate_series_full(
@@ -252,19 +335,16 @@ class Trainer:
                     dice_epochs.append(ep)
                     dice_val.append(val_dice)
 
-                    if val_dice > best_val_dice:
+                    improved = val_dice > best_val_dice
+                    if improved:
                         best_val_dice = val_dice
+                        best_epoch = ep
                         best_state = {
                             k: v.detach().cpu().clone()
                             for k, v in model.state_dict().items()
                         }
 
-                        sched_state_best = None
-                        if sched_bundle is not None:
-                            try:
-                                sched_state_best = sched_bundle.scheduler.state_dict()
-                            except Exception:
-                                sched_state_best = None
+                        sched_state_best = self._safe_scheduler_state(sched_bundle)
 
                         self.ckpt.save_fold_best(
                             fold_id=fold_id,
@@ -280,20 +360,13 @@ class Trainer:
                             },
                         )
 
-                    sched_state_live = None
-                    if sched_bundle is not None:
-                        try:
-                            sched_state_live = sched_bundle.scheduler.state_dict()
-                        except Exception:
-                            sched_state_live = None
-
                     self.ckpt.save_fold_last(
                         fold_id=fold_id,
                         fold_name=fold_name,
                         epoch=ep,
                         model=model,
                         optimizer=opt,
-                        scheduler_state=sched_state_live,
+                        scheduler_state=self._safe_scheduler_state(sched_bundle),
                         best_val_metric=best_val_dice,
                         extra={
                             "fold_seed": fold_seed,
@@ -303,48 +376,32 @@ class Trainer:
                         },
                     )
 
-                    curves_loss: Dict[str, Curve] = {
-                        "train_loss": Curve(
-                            name="train_loss",
-                            x=[float(e) for e in loss_epochs],
-                            y=[float(v) for v in loss_train],
-                        ),
-                    }
-                    xs_v, ys_v = [], []
-                    for e, v in zip(loss_epochs, loss_val):
-                        if v is None:
-                            continue
-                        xs_v.append(float(e))
-                        ys_v.append(float(v))
-                    if ys_v:
-                        curves_loss["val_loss"] = Curve(name="val_loss", x=xs_v, y=ys_v)
-
-                    fc_loss = FoldCurves(fold_name=fold_name, curves=curves_loss)
-                    plot_fold_curves(
-                        fc_loss,
-                        metrics=("train_loss", "val_loss"),
-                        title=f"{fold_name} | loss",
-                        show=False,
-                        savepath=str(loss_png),
-                    )
-
-                    fc_dice = FoldCurves(
+                    self._update_curves(
                         fold_name=fold_name,
-                        curves={
-                            "val_dice": Curve(
-                                name="val_dice",
-                                x=[float(e) for e in dice_epochs],
-                                y=[float(v) for v in dice_val],
-                            ),
-                        },
+                        loss_png=loss_png,
+                        dice_png=dice_png,
+                        loss_epochs=loss_epochs,
+                        loss_train=loss_train,
+                        loss_val=loss_val,
+                        dice_epochs=dice_epochs,
+                        dice_val=dice_val,
                     )
-                    plot_fold_curves(
-                        fc_dice,
-                        metrics=("val_dice",),
-                        title=f"{fold_name} | dice",
-                        show=False,
-                        savepath=str(dice_png),
-                    )
+
+                    if (
+                        self.early_stop_patience is not None
+                        and (ep - best_epoch) >= self.early_stop_patience
+                    ):
+                        self.logger.info(
+                            "[Trainer] %s: early stopping at epoch %d (best=%d, patience=%d)",
+                            fold_name,
+                            ep,
+                            best_epoch,
+                            self.early_stop_patience,
+                        )
+                        stopped_early = True
+                        state["best_val_metric"] = best_val_dice
+                        self.hooks.on_epoch_end(state)
+                        break
 
                 state["best_val_metric"] = best_val_dice
                 self.hooks.on_epoch_end(state)
@@ -352,29 +409,65 @@ class Trainer:
             if best_state is not None:
                 model.load_state_dict(best_state)
 
-            with torch.inference_mode():
-                test_metrics = evaluate_series_full(
-                    model,
-                    test_frames,
-                    patch=self.patch,
-                    stride=self.stride,
-                    device=self.device,
-                    thr=self.thr,
-                )
+            chosen_thr, val_thr_summary = self._select_threshold(
+                model, val_frames
+            )
 
+            if self.compute_test_object_metrics:
+                with torch.inference_mode():
+                    test_metrics = evaluate_with_object_metrics(
+                        model,
+                        test_frames,
+                        patch=self.patch,
+                        stride=self.stride,
+                        device=self.device,
+                        thr=chosen_thr,
+                        use_tta=self.test_tta,
+                    )
+            else:
+                with torch.inference_mode():
+                    test_metrics = evaluate_series_full(
+                        model,
+                        test_frames,
+                        patch=self.patch,
+                        stride=self.stride,
+                        device=self.device,
+                        thr=chosen_thr,
+                        use_tta=self.test_tta,
+                    )
+
+            test_metrics["chosen_thr"] = float(chosen_thr)
+            test_metrics["stopped_early"] = bool(stopped_early)
+            test_metrics["best_epoch"] = int(best_epoch)
             state["test_metrics"] = test_metrics
             self.hooks.on_fold_end(state)
 
-            self.fold_results.append({
+            fold_record = {
                 "fold_id": fold_id,
                 "fold_name": fold_name,
                 "test_series": test_s,
                 "best_val_dice": float(best_val_dice),
+                "best_epoch": int(best_epoch),
+                "stopped_early": bool(stopped_early),
+                "chosen_thr": float(chosen_thr),
+                "val_threshold_summary": val_thr_summary,
                 "test_metrics": test_metrics,
-            })
+            }
+            self.fold_results.append(fold_record)
 
             all_fold_test.append(test_metrics)
             global_best_val = max(global_best_val, best_val_dice)
+
+            self.logger.info(
+                "[Trainer] %s done: best_val=%.4f @ ep %d, thr=%.2f, "
+                "test_dice=%.4f, test_iou=%.4f",
+                fold_name,
+                best_val_dice,
+                best_epoch,
+                chosen_thr,
+                float(test_metrics.get("dice", 0.0)),
+                float(test_metrics.get("iou", 0.0)),
+            )
 
         self.best_metric = float(global_best_val)
         self.last_metrics = (
@@ -384,11 +477,104 @@ class Trainer:
         )
         self.ckpt.save_run_summary(self, metric_value=self.best_metric)
 
+    def _select_threshold(
+        self,
+        model: torch.nn.Module,
+        val_frames: List[Any],
+    ):
+        """
+        Pick the test-time threshold.
+
+        If trainer.threshold_sweep is configured, sweep on val and pick
+        the best-Dice threshold. Otherwise return the fixed self.thr
+        and an empty summary.
+        """
+        if self.threshold_sweep is None:
+            return float(self.thr), {}
+
+        with torch.inference_mode():
+            sweep = evaluate_with_threshold_sweep(
+                model,
+                val_frames,
+                patch=self.patch,
+                stride=self.stride,
+                device=self.device,
+                thresholds=self.threshold_sweep,
+                use_tta=self.test_tta,
+            )
+        best_thr, _ = find_best_threshold(sweep, metric="dice")
+        summary = {f"{t:.2f}": sweep[t] for t in sorted(sweep.keys())}
+        return float(best_thr), summary
+
+    def _update_curves(
+        self,
+        *,
+        fold_name: str,
+        loss_png: Path,
+        dice_png: Path,
+        loss_epochs: List[int],
+        loss_train: List[float],
+        loss_val: List[Optional[float]],
+        dice_epochs: List[int],
+        dice_val: List[float],
+    ) -> None:
+        curves_loss: Dict[str, Curve] = {
+            "train_loss": Curve(
+                name="train_loss",
+                x=[float(e) for e in loss_epochs],
+                y=[float(v) for v in loss_train],
+            ),
+        }
+        xs_v, ys_v = [], []
+        for e, v in zip(loss_epochs, loss_val):
+            if v is None:
+                continue
+            xs_v.append(float(e))
+            ys_v.append(float(v))
+        if ys_v:
+            curves_loss["val_loss"] = Curve(name="val_loss", x=xs_v, y=ys_v)
+
+        fc_loss = FoldCurves(fold_name=fold_name, curves=curves_loss)
+        plot_fold_curves(
+            fc_loss,
+            metrics=("train_loss", "val_loss"),
+            title=f"{fold_name} | loss",
+            show=False,
+            savepath=str(loss_png),
+        )
+
+        fc_dice = FoldCurves(
+            fold_name=fold_name,
+            curves={
+                "val_dice": Curve(
+                    name="val_dice",
+                    x=[float(e) for e in dice_epochs],
+                    y=[float(v) for v in dice_val],
+                ),
+            },
+        )
+        plot_fold_curves(
+            fc_dice,
+            metrics=("val_dice",),
+            title=f"{fold_name} | dice",
+            show=False,
+            savepath=str(dice_png),
+        )
+
+    @staticmethod
+    def _safe_scheduler_state(sched_bundle: Optional[SchedulerBundle]):
+        if sched_bundle is None:
+            return None
+        try:
+            return sched_bundle.scheduler.state_dict()
+        except Exception:
+            return None
+
 
 def _extract_val_loss(val_metrics: Dict[str, Any]) -> Optional[float]:
     """
     Try common keys for validation loss returned by evaluate_series_full().
-    Kept tolerant to avoid crashing shall loss not provided.
+    Kept tolerant to avoid crashing should loss not be provided.
     """
     for k in ("loss", "val_loss", "bce", "bce_loss"):
         if k in val_metrics:
@@ -418,7 +604,7 @@ def resolve_run_output_dir(cfg: Dict[str, Any]) -> Path:
     Resolve a unique, timestamped run directory and update cfg in place.
 
     Layout:  <base_output_dir> / <model_name> / <timestamp>
-    Example: runs/unet4/2026-04-03_153000
+    Example: runs/unet4/2026-04-29_153000
     """
     tcfg = cfg.setdefault("trainer", {})
 
