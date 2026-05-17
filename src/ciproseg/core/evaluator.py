@@ -10,8 +10,8 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-04-29, MK
-#  Version       : 0.1.0
+#  Last modified : 2026-05-17, MK
+#  Version       : 0.1.1
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
@@ -48,6 +48,11 @@ _DEFAULT_THRESHOLD_GRID = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60)
 # 1..50 are treated as background (CiproSeg quirk). 128 is the safe cutoff.
 _MASK_BIN_THRESHOLD = 128
 
+# Floor for the Hann blending weights. Keeps pixels at the very edge of
+# the image (where only one tile contributes and the window value is 0)
+# from being divided by zero, without affecting interior blending.
+_HANN_MIN_WEIGHT = 1e-3
+
 
 def tile_positions(h: int, w: int, patch: int, stride: int) -> List[Tuple[int, int]]:
     """Deterministic (x, y) top-left tile positions that fully cover the image."""
@@ -60,6 +65,25 @@ def tile_positions(h: int, w: int, patch: int, stride: int) -> List[Tuple[int, i
     return [(x, y) for y in ys for x in xs]
 
 
+def _hann_window_2d(patch: int, min_weight: float = _HANN_MIN_WEIGHT) -> np.ndarray:
+    """
+    Build a 2D Hann window for tile blending.
+
+    The outer product of a 1D Hann window with itself, clamped to a small
+    positive value so corner pixels at the image boundary still receive a
+    non-zero contribution after the final accumulator division.
+
+    With stride = patch / 2 (the project default), a 2D Hann window sums
+    to a constant across the interior of the image, so seams are smoothed
+    without changing the overall probability scale.
+    """
+    if patch < 2:
+        raise ValueError(f"patch must be >= 2 for Hann blending, got {patch}")
+    win_1d = np.hanning(patch).astype(np.float32)
+    win_2d = np.outer(win_1d, win_1d)
+    return np.maximum(win_2d, np.float32(min_weight))
+
+
 @torch.no_grad()
 def predict_full_mask_tiled(
     model: nn.Module,
@@ -69,8 +93,14 @@ def predict_full_mask_tiled(
     device: str = "cuda",
 ) -> np.ndarray:
     """
-    Full image tiled inference with overlap averaging.
-    Expects a 2D float array in [0, 1]; returns a probability map of the same shape.
+    Full image tiled inference with Hann-windowed overlap blending.
+
+    Expects a 2D float array in [0, 1]; returns a probability map of the
+    same shape. Each tile prediction is multiplied by a 2D Hann window
+    before accumulation so that pixels near a tile edge (where the
+    network has less spatial context) contribute less than pixels near
+    a tile centre. This removes the visible tile seams that a flat
+    (weight = 1.0) average leaves in the probability map.
     """
     if img_gray01.ndim != 2:
         raise ValueError(f"img_gray01 must be 2D (H,W), got {img_gray01.shape}")
@@ -79,6 +109,7 @@ def predict_full_mask_tiled(
     h, w = img_gray01.shape
     acc = np.zeros((h, w), dtype=np.float32)
     wgt = np.zeros((h, w), dtype=np.float32)
+    window = _hann_window_2d(patch)
 
     for x, y in tile_positions(h, w, patch, stride):
         crop = img_gray01[y:y + patch, x:x + patch]
@@ -90,8 +121,9 @@ def predict_full_mask_tiled(
         prob = torch.sigmoid(model(inp)).squeeze().detach().cpu().numpy().astype(np.float32)
 
         ph, pw = min(patch, h - y), min(patch, w - x)
-        acc[y:y + ph, x:x + pw] += prob[:ph, :pw]
-        wgt[y:y + ph, x:x + pw] += 1.0
+        win = window[:ph, :pw]
+        acc[y:y + ph, x:x + pw] += prob[:ph, :pw] * win
+        wgt[y:y + ph, x:x + pw] += win
 
     return acc / np.maximum(wgt, 1e-8)
 
@@ -520,3 +552,4 @@ class Evaluator:
 
     def test(self, ckpt_path: Optional[str] = None) -> Dict[str, float]:
         return self.evaluate(ckpt_path=ckpt_path)
+    
