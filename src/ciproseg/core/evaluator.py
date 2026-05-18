@@ -10,8 +10,8 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-05-17, MK
-#  Version       : 0.1.1
+#  Last modified : 2026-05-18, MK
+#  Version       : 0.1.2
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
 # =======================================================================
@@ -30,7 +30,6 @@ from ..data.datasets.ciproseg_ecoli import (
     build_index,
     read_image_gray,
     read_mask_01,
-    pad_to_patch,
 )
 from ..metrics.segmentation import evaluate_full_image_numpy
 from ..metrics.objects import compute_object_metrics, aggregate_object_metrics
@@ -51,7 +50,12 @@ _MASK_BIN_THRESHOLD = 128
 # Floor for the Hann blending weights. Keeps pixels at the very edge of
 # the image (where only one tile contributes and the window value is 0)
 # from being divided by zero, without affecting interior blending.
-_HANN_MIN_WEIGHT = 1e-3
+_HANN_MIN_WEIGHT = 0.05
+
+# Boundary padding mode used to extend the image up to a tile-grid-aligned
+# size before tiled inference. "reflect" matches BORDER_REFLECT_101 used
+# elsewhere in the pipeline (mirrors without repeating the edge pixel).
+_BOUNDARY_PAD_MODE = "reflect"
 
 
 def tile_positions(h: int, w: int, patch: int, stride: int) -> List[Tuple[int, int]]:
@@ -84,6 +88,22 @@ def _hann_window_2d(patch: int, min_weight: float = _HANN_MIN_WEIGHT) -> np.ndar
     return np.maximum(win_2d, np.float32(min_weight))
 
 
+def _grid_aligned_size(size: int, patch: int, stride: int) -> int:
+    """
+    Smallest size >= `size` such that (size_aligned - patch) is a
+    non-negative multiple of stride. Padding the image up to this
+    aligned size puts every tile position on the regular stride grid,
+    which is the condition under which the Hann window constant-sum
+    property holds across the whole image (no residual seam at the
+    bottom or right edge from an irregular last-tile offset).
+    """
+    if size <= patch:
+        return patch
+    extra = size - patch
+    n_strides = (extra + stride - 1) // stride
+    return patch + n_strides * stride
+
+
 @torch.no_grad()
 def predict_full_mask_tiled(
     model: nn.Module,
@@ -95,37 +115,64 @@ def predict_full_mask_tiled(
     """
     Full image tiled inference with Hann-windowed overlap blending.
 
-    Expects a 2D float array in [0, 1]; returns a probability map of the
-    same shape. Each tile prediction is multiplied by a 2D Hann window
-    before accumulation so that pixels near a tile edge (where the
-    network has less spatial context) contribute less than pixels near
-    a tile centre. This removes the visible tile seams that a flat
-    (weight = 1.0) average leaves in the probability map.
+    Steps:
+    1. Validate input shape and tiling parameters
+    2. Reflect-pad the image up to a tile-grid-aligned size
+    3. Run Hann-windowed tiled inference on the padded image
+    4. Crop the result back to the original image shape
+
+    Expects a 2D float array in [0, 1]; returns a probability map of
+    the same shape.
+
+    Why padding to a grid-aligned size matters. The Hann window only
+    sums to a constant in the overlap region when adjacent tiles are
+    offset by exactly `stride`. If the image dimension is not of the
+    form patch + k * stride, tile_positions appends one extra tile at
+    an irregular offset to cover the boundary. That irregular tile
+    breaks the constant-sum guarantee and leaves a faint residual band
+    aligned with the irregular tile edge. Padding to a grid-aligned
+    size removes the irregular tile entirely.
     """
     if img_gray01.ndim != 2:
         raise ValueError(f"img_gray01 must be 2D (H,W), got {img_gray01.shape}")
+    if patch < 2:
+        raise ValueError(f"patch must be >= 2, got {patch}")
+    if stride <= 0 or stride > patch:
+        raise ValueError(
+            f"stride must satisfy 0 < stride <= patch; got stride={stride}, patch={patch}"
+        )
 
     model.eval()
     h, w = img_gray01.shape
-    acc = np.zeros((h, w), dtype=np.float32)
-    wgt = np.zeros((h, w), dtype=np.float32)
+
+    # Pad to a tile-grid-aligned size with reflection at the boundary.
+    h_pad = _grid_aligned_size(h, patch, stride)
+    w_pad = _grid_aligned_size(w, patch, stride)
+    img_padded = np.pad(
+        img_gray01,
+        ((0, h_pad - h), (0, w_pad - w)),
+        mode=_BOUNDARY_PAD_MODE,
+    )
+
+    acc = np.zeros((h_pad, w_pad), dtype=np.float32)
+    wgt = np.zeros((h_pad, w_pad), dtype=np.float32)
     window = _hann_window_2d(patch)
 
-    for x, y in tile_positions(h, w, patch, stride):
-        crop = img_gray01[y:y + patch, x:x + patch]
-
-        if crop.shape != (patch, patch):
-            crop, _ = pad_to_patch(crop, np.zeros_like(crop, dtype=np.uint8), patch)
-
+    # After padding, every tile crop is exactly (patch, patch) and every
+    # tile position is on the regular stride grid. The Hann constant-sum
+    # property holds across the whole padded image.
+    for x, y in tile_positions(h_pad, w_pad, patch, stride):
+        crop = img_padded[y:y + patch, x:x + patch]
         inp = torch.from_numpy(crop.astype(np.float32)).unsqueeze(0).unsqueeze(0).to(device)
         prob = torch.sigmoid(model(inp)).squeeze().detach().cpu().numpy().astype(np.float32)
 
-        ph, pw = min(patch, h - y), min(patch, w - x)
-        win = window[:ph, :pw]
-        acc[y:y + ph, x:x + pw] += prob[:ph, :pw] * win
-        wgt[y:y + ph, x:x + pw] += win
+        acc[y:y + patch, x:x + patch] += prob * window
+        wgt[y:y + patch, x:x + patch] += window
 
-    return acc / np.maximum(wgt, 1e-8)
+    # Crop the accumulator and weight buffers back to the original image
+    # shape before the final division. Reflected boundary contributions
+    # are discarded here.
+    return acc[:h, :w] / np.maximum(wgt[:h, :w], 1e-8)
 
 
 # Forward and inverse D4 group operations. Each forward op transforms
