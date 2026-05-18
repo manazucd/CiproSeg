@@ -57,8 +57,8 @@ slurm-*
 # =========================
 # Under development
 # =========================
-gui/
-gui_cli.py
+#gui/
+#gui_cli.py
 README.md
 GUI_README.md
 docs
