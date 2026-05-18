@@ -50,7 +50,7 @@ _MASK_BIN_THRESHOLD = 128
 # Floor for the Hann blending weights. Keeps pixels at the very edge of
 # the image (where only one tile contributes and the window value is 0)
 # from being divided by zero, without affecting interior blending.
-_HANN_MIN_WEIGHT = 0.05
+_HANN_MIN_WEIGHT = 1e-3
 
 # Boundary padding mode used to extend the image up to a tile-grid-aligned
 # size before tiled inference. "reflect" matches BORDER_REFLECT_101 used
