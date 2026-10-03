@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -61,7 +61,7 @@ def load_config(path: str) -> Dict[str, Any]:
     if not isinstance(cfg, dict):
         raise ValueError("Config root must be a mapping (YAML dict).")
 
-    for section in ("trainer", "dataset", "logger"):
+    for section in ("trainer", "validation", "dataset", "logger"):
         cfg.setdefault(section, {})
         _expand_section(cfg, section)
 

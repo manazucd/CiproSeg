@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-04-29, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -60,7 +60,6 @@ _VAL_EVERY_N_EPOCHS = 10
 
 # Default threshold grid swept on val before running the final test.
 # Range chosen to bracket the empirically observed CiproSeg optima.
-_DEFAULT_THRESHOLD_GRID = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60)
 
 
 class Trainer:
@@ -95,11 +94,23 @@ class Trainer:
         self.stride = int(dcfg.get("stride", 128))
 
         tcfg = cfg.get("trainer") or {}
+        vcfg = cfg.get("validation") or {}
+
         self.epochs = int(tcfg.get("epochs", 40))
         self.batch_size = int(tcfg.get("batch_size", 8))
         self.num_workers = int(tcfg.get("num_workers", 2))
         self.seed = int(tcfg.get("seed", 1234))
-        self.thr = float(tcfg.get("thr", 0.5))
+
+        self.checkpoint_threshold = float(
+            vcfg.get("checkpoint_threshold", 0.5)
+        )
+
+        if not (0.0 < self.checkpoint_threshold < 1.0):
+            raise ValueError(
+                "validation.checkpoint_threshold must be in (0, 1), "
+                f"got {self.checkpoint_threshold}"
+            )
+
         self.target_patches_per_epoch = int(tcfg.get("target_patches_per_epoch", 2000))
         self.deterministic = bool(tcfg.get("deterministic", False))
         self.benchmark = bool(tcfg.get("benchmark", True))
@@ -116,8 +127,14 @@ class Trainer:
 
         self.use_amp = bool(tcfg.get("amp", False))
 
-        sweep_cfg = tcfg.get("threshold_sweep", None)
-        self.threshold_sweep = self._resolve_threshold_sweep(sweep_cfg)
+        self.threshold_sweep_enabled = bool(
+        vcfg.get("threshold_sweep", False)
+        )
+
+        self.sweeping_thresholds = self._resolve_sweeping_thresholds(
+            enabled=self.threshold_sweep_enabled,
+            thresholds_cfg=vcfg.get("sweeping_thresholds", None),
+        )
 
         self.test_tta = bool(tcfg.get("test_tta", False))
         self.compute_test_object_metrics = bool(tcfg.get("compute_object_metrics", False))
@@ -142,32 +159,51 @@ class Trainer:
         self.fold_results: List[Dict[str, Any]] = []
 
     @staticmethod
-    def _resolve_threshold_sweep(sweep_cfg: Any) -> Optional[Sequence[float]]:
+    def _resolve_sweeping_thresholds(
+        enabled: bool,
+        thresholds_cfg: Any,
+    ) -> Optional[Sequence[float]]:
         """
-        Normalise the trainer.threshold_sweep config option.
+        Validate the thresholds used for the post training
+        validation threshold sweep.
 
-        Accepted forms:
-            None / False              -> no sweep, use fixed thr
-            True                      -> sweep over the default grid
-            list/tuple of numbers     -> sweep over the given values
+        If threshold_sweep is False, no sweep is performed and the
+        checkpoint threshold is used.
+
+        If threshold_sweep is True, sweeping_thresholds must contain
+        one or more values in the open interval (0, 1).
+
+        The number of thresholds is unrestricted.
         """
-        if sweep_cfg is None or sweep_cfg is False:
+        if not enabled:
             return None
-        if sweep_cfg is True:
-            return _DEFAULT_THRESHOLD_GRID
-        if isinstance(sweep_cfg, (list, tuple)):
-            values = [float(v) for v in sweep_cfg]
-            if not values:
-                raise ValueError("threshold_sweep list is empty")
-            for v in values:
-                if not (0.0 < v < 1.0):
-                    raise ValueError(
-                        f"threshold_sweep values must be in (0, 1), got {v}"
-                    )
-            return tuple(values)
-        raise ValueError(
-            f"Unsupported threshold_sweep value: {sweep_cfg!r}"
-        )
+
+        if thresholds_cfg is None:
+            raise ValueError(
+                "validation.threshold_sweep is true, but "
+                "validation.sweeping_thresholds is not defined"
+            )
+
+        if not isinstance(thresholds_cfg, (list, tuple)):
+            raise ValueError(
+                "validation.sweeping_thresholds must be a list of numbers"
+            )
+
+        if len(thresholds_cfg) == 0:
+            raise ValueError(
+                "validation.sweeping_thresholds cannot be empty"
+            )
+
+        values = tuple(float(v) for v in thresholds_cfg)
+
+        for v in values:
+            if not (0.0 < v < 1.0):
+                raise ValueError(
+                    "validation.sweeping_thresholds values must be "
+                    f"in (0, 1), got {v}"
+                )
+
+        return values
 
     def train(self, start_state: Optional[Dict[str, Any]] = None) -> None:
         _ = start_state
@@ -320,7 +356,7 @@ class Trainer:
                             patch=self.patch,
                             stride=self.stride,
                             device=self.device,
-                            thr=self.thr,
+                            thr=self.checkpoint_threshold,
                             compute_loss=True,
                         )
                     torch.cuda.empty_cache()
@@ -436,23 +472,42 @@ class Trainer:
                         use_tta=self.test_tta,
                     )
 
-            test_metrics["chosen_thr"] = float(chosen_thr)
             test_metrics["stopped_early"] = bool(stopped_early)
-            test_metrics["best_epoch"] = int(best_epoch)
+            test_metrics["best_checkpoint_epoch"] = int(best_epoch)
+
             state["test_metrics"] = test_metrics
             self.hooks.on_fold_end(state)
+
+            selected_thr_key = f"{chosen_thr:.2f}"
+
+            selected_metric_value = None
+            if val_thr_summary and selected_thr_key in val_thr_summary:
+                selected_metric_value = float(
+                    val_thr_summary[selected_thr_key]["dice"]
+                )
 
             fold_record = {
                 "fold_id": fold_id,
                 "fold_name": fold_name,
                 "test_series": test_s,
-                "best_val_dice": float(best_val_dice),
-                "best_epoch": int(best_epoch),
+
+                "best_checkpoint_validation_dice": float(best_val_dice),
+                "best_checkpoint_epoch": int(best_epoch),
                 "stopped_early": bool(stopped_early),
-                "chosen_thr": float(chosen_thr),
-                "val_threshold_summary": val_thr_summary,
+
+                "threshold_selection": {
+                    "selection_set": "validation",
+                    "selection_metric": "dice",
+                    "selected_threshold": float(chosen_thr),
+                    "selected_metric_value": selected_metric_value,
+                    "candidate_thresholds": list(
+                        self.sweeping_thresholds or []
+                    ),
+                    "metrics_by_threshold": val_thr_summary,
+                },
+
                 "test_metrics": test_metrics,
-            }
+            }         
             self.fold_results.append(fold_record)
 
             all_fold_test.append(test_metrics)
@@ -483,14 +538,16 @@ class Trainer:
         val_frames: List[Any],
     ):
         """
-        Pick the test-time threshold.
+        Select the final binary mask threshold using the validation set.
 
-        If trainer.threshold_sweep is configured, sweep on val and pick
-        the best-Dice threshold. Otherwise return the fixed self.thr
-        and an empty summary.
+        If validation.threshold_sweep is enabled, evaluate all thresholds
+        listed in validation.sweeping_thresholds and select the threshold
+        with the highest mean validation Dice.
+
+        Otherwise, use validation.checkpoint_threshold.
         """
-        if self.threshold_sweep is None:
-            return float(self.thr), {}
+        if self.sweeping_thresholds is None:
+            return float(self.checkpoint_threshold), {}
 
         with torch.inference_mode():
             sweep = evaluate_with_threshold_sweep(
@@ -499,7 +556,7 @@ class Trainer:
                 patch=self.patch,
                 stride=self.stride,
                 device=self.device,
-                thresholds=self.threshold_sweep,
+                thresholds=self.sweeping_thresholds,
                 use_tta=self.test_tta,
             )
         best_thr, _ = find_best_threshold(sweep, metric="dice")

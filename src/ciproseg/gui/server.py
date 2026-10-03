@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-04-11
-#  Last modified : 2026-04-11, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -559,12 +559,24 @@ _FALLBACK_CONFIG: Dict[str, Any] = {
         "batch_size": 8,
         "num_workers": 4,
         "seed": 1234,
-        "thr": 0.5,
         "target_patches_per_epoch": 2000,
         "deterministic": False,
         "benchmark": True,
         "cpu": False,
         "output_dir": "runs",
+    },
+    "validation": {
+        "checkpoint_threshold": 0.5,
+        "threshold_sweep": True,
+        "sweeping_thresholds": [
+            0.30,
+            0.35,
+            0.40,
+            0.45,
+            0.50,
+            0.55,
+            0.60,
+        ],
     },
     "optim": {"name": "adamw", "lr": 3e-4, "weight_decay": 1e-2},
     "sched": {"name": "cosine", "tmax": 500},

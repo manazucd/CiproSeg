@@ -1,0 +1,45 @@
+dataset:
+  name: ciproseg_ecoli
+  root: /home/manaz/git-projects/CiproSeg/Data/miniture_4_debug
+  train_frac: 0.8
+  patch: 384
+  stride: 192
+model:
+  name: unet4
+  in_channels: 1
+  out_channels: 1
+  base_channels: 64
+  dropout_p: 0.0
+  norm: batch
+trainer:
+  epochs: 500
+  batch_size: 4
+  num_workers: 4
+  seed: 1234
+  thr: 0.5
+  target_patches_per_epoch: 1500
+  deterministic: false
+  benchmark: true
+  cpu: true
+  output_dir: runs/config_A/unet4/2026-04-29_162223
+  amp: true
+  early_stop_patience: 100
+  threshold_sweep: true
+  test_tta: false
+  compute_object_metrics: true
+  _output_dir_resolved: true
+loss:
+  name: dice_bce
+  dice_weight: 0.5
+  bce_weight: 0.5
+optim:
+  name: adamw
+  lr: 0.0002
+  weight_decay: 0.01
+sched:
+  name: cosine
+  tmax: 500
+  warmup_epochs: 10
+logger:
+  name: ciproseg
+  level: INFO

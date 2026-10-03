@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-04-03, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -61,10 +61,30 @@ class Checkpointer:
         if not is_global_zero():
             return
 
+        fold_results = getattr(trainer, "fold_results", [])
+
+        best_validation_thresholds = [
+            {
+                "fold_id": int(fold["fold_id"]),
+                "held_out_series": fold["test_series"],
+                "threshold": float(
+                    fold["threshold_selection"]["selected_threshold"]
+                ),
+            }
+            for fold in fold_results
+        ]
+
         state: Dict[str, Any] = {
-            "best_metric": float(metric_value),
-            "last_metrics": getattr(trainer, "last_metrics", {}),
-            "fold_results": getattr(trainer, "fold_results", []),
+            "best_validation_thresholds": best_validation_thresholds,
+
+            "best_validation_dice_across_folds": float(metric_value),
+
+            "mean_test_metrics_across_folds": getattr(
+                trainer, "last_metrics", {}
+            ),
+
+            "fold_results": fold_results,
+
             "cfg": self.cfg,
         }
 

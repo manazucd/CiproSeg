@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-02-21
-#  Last modified : 2026-04-07, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -37,12 +37,13 @@ logger = logging.getLogger("ciproseg")
 _IMAGE_EXTS: Tuple[str, ...] = (".tif", ".tiff", ".png", ".jpg", ".jpeg")
 
 # Suffixes used when writing output artefacts (relative to stem of input file)
-_SUFFIX_PROB = "_prob.png"          # 16-bit PNG  probability map  [0, 65535]
-_SUFFIX_BINARY = "_binary.png"      # 8-bit  PNG  binary mask      {0, 255}
-_SUFFIX_PRED_OVERLAY = "_pred_overlay.png"   # original (as BGR) + predicted boundary in green
-_SUFFIX_GT_OVERLAY = "_gt_overlay.png"       # original (as BGR) + GT boundary in cyan   [optional]
+_SUFFIX_PROB_NPY = "_prob.npy"      # float32 probability map [0.0, 1.0]
+_SUFFIX_PROB = "_prob.png"          # uint16 visualisation [0, 65535]
+_SUFFIX_BINARY = "_binary.png"      # uint8 binary mask {0, 255}
 _SUFFIX_DIFF = "_diff.png"          # TP/FP/FN colour map                                [optional]
 
+_SUFFIX_PRED_OVERLAY = "_pred_overlay.png"   # original (as BGR) + predicted boundary in green
+_SUFFIX_GT_OVERLAY = "_gt_overlay.png"       # original (as BGR) + GT boundary in cyan   [optional]
 
 def load_model_from_checkpoint(
     ckpt_path: str,
@@ -154,8 +155,14 @@ def save_inference_outputs(
     """
     written: List[str] = []
 
-    binary_255 = ((prob >= threshold) * 255).astype(np.uint8)          # {0, 255}
-    prob_u16 = _prob_to_uint16(prob)                                     # uint16
+    # Save the original floating point probability map [0.0, 1.0]
+    prob_npy_path = os.path.join(out_dir, stem + _SUFFIX_PROB_NPY)
+    np.save(prob_npy_path, prob.astype(np.float32, copy=False))
+    written.append(prob_npy_path)
+
+    binary_255 = ((prob >= threshold) * 255).astype(np.uint8)
+    prob_u16 = _prob_to_uint16(prob)
+
     gray_u8 = _to_uint8_gray(img_gray01)                                 # uint8
     bgr = cv2.cvtColor(gray_u8, cv2.COLOR_GRAY2BGR)                      # (H,W,3) uint8
 

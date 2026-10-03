@@ -59,7 +59,7 @@ slurm-*
 # =========================
 #gui/
 #gui_cli.py
-README.md
+#README.md
 GUI_README.md
 #docs
 #index.html

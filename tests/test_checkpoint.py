@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-02-18, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -53,16 +53,18 @@ def test_checkpointer_saves_run_summary(tmp_path: Path) -> None:
     assert js_path.exists(), "Expected run_summary.json to be written"
 
     state = torch.load(pt_path, map_location="cpu")
-    assert "best_metric" in state
-    assert "last_metrics" in state
-    assert state["last_metrics"]["dice"] == tr.last_metrics["dice"]
+    assert "best_validation_dice_across_folds" in state
+    assert "mean_test_metrics_across_folds" in state
+    assert state["mean_test_metrics_across_folds"]["dice"] == tr.last_metrics["dice"]
 
     with js_path.open("r", encoding="utf-8") as fh:
         j = json.load(fh)
 
-    assert "best_metric" in j
-    assert "last_metrics" in j
-    assert abs(float(j["best_metric"]) - tr.best_metric) < 1e-12
+    assert "best_validation_dice_across_folds" in j
+    assert "mean_test_metrics_across_folds" in j
+    assert abs(
+        float(j["best_validation_dice_across_folds"]) - tr.best_metric
+    ) < 1e-12
 
 
 def test_checkpointer_maybe_load_when_missing(tmp_path: Path) -> None:

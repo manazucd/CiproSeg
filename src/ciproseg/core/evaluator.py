@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-05-18, MK
+#  Last modified : 2026-10-03, MK
 #  Version       : 0.1.2
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -38,10 +38,7 @@ from ..utils.logger import get_logger
 from .hooks import HookList
 
 
-# Default thresholds swept over when find_best_threshold is asked to
-# choose its own grid. Range chosen to bracket the empirically observed
-# optimal thresholds for CiproSeg (0.40 to 0.55).
-_DEFAULT_THRESHOLD_GRID = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60)
+
 
 # Mask binarisation threshold. Project convention: mask pixel values in
 # 1..50 are treated as background (CiproSeg quirk). 128 is the safe cutoff.
@@ -305,7 +302,7 @@ def evaluate_with_threshold_sweep(
     patch: int,
     stride: int,
     device: str,
-    thresholds: Sequence[float] = _DEFAULT_THRESHOLD_GRID,
+    thresholds: Sequence[float],
     use_tta: bool = False,
 ) -> Dict[float, Dict[str, float]]:
     """
