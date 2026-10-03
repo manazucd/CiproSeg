@@ -1,716 +1,552 @@
 <!DOCTYPE html>
 <html lang="en">
+
+<!--
+    ╔=========================╗
+    ║ CiproSeg - Entry Point  ║
+    ╚=========================╝
+
+    ╔═════════════════════════╗
+    ║ Page:     index.html    ║
+    ║ Created:  05.04.2026    ║
+    ║ Edited:   03.10.2026    ║
+    ║ Author:   Manaz Kaleel  ║
+    ╚═════════════════════════╝
+-->
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CiproSeg - LOSO U-Net Segmentation Framework</title>
-<meta name="description" content="CiproSeg is a PyTorch framework for binary cell segmentation using U-Net with Leave-One-Series-Out cross-validation.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Source Serif 4', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
-
-  --bg: #fdfdfc;
-  --bg-alt: #f6f5f3;
-  --bg-code: #f0eee9;
-  --bg-sidebar: #fafaf8;
-  --text: #2c2c2c;
-  --text-light: #5a5a5a;
-  --text-lighter: #888;
-  --accent: #1a6b4a;
-  --accent-light: #e8f3ed;
-  --accent-hover: #145538;
-  --border: #e0ddd8;
-  --border-light: #ece9e4;
-  --shadow: rgba(0,0,0,0.06);
-  --code-keyword: #8250df;
-  --code-string: #0a6640;
-  --code-comment: #8b949e;
-  --code-number: #b35900;
-
-  --sidebar-w: 260px;
-  --header-h: 56px;
-  --content-max: 780px;
-}
-
-html { scroll-behavior: smooth; scroll-padding-top: 80px; }
-
-body {
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.65;
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-}
-
-a { color: var(--accent); text-decoration: none; }
-a:hover { color: var(--accent-hover); text-decoration: underline; }
-
-/* ---- HEADER ---- */
-.site-header {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 100;
-  height: var(--header-h);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-}
-.site-header .logo {
-  font-family: var(--font-heading);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.3px;
-}
-.site-header .logo span { color: var(--accent); }
-.site-header .header-links {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: 14px;
-}
-.site-header .header-links a { color: var(--text-light); }
-.site-header .header-links a:hover { color: var(--accent); text-decoration: none; }
-.gh-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text) !important;
-  transition: border-color 0.15s;
-}
-.gh-link:hover { border-color: var(--accent); text-decoration: none !important; }
-.gh-link svg { width: 16px; height: 16px; }
-
-.menu-toggle {
-  display: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  margin-right: 12px;
-}
-.menu-toggle span {
-  display: block;
-  width: 20px;
-  height: 2px;
-  background: var(--text);
-  margin: 4px 0;
-  border-radius: 1px;
-}
-
-/* ---- SIDEBAR ---- */
-.sidebar {
-  position: fixed;
-  top: var(--header-h);
-  left: 0;
-  bottom: 0;
-  width: var(--sidebar-w);
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-light);
-  overflow-y: auto;
-  padding: 24px 0 40px;
-  font-size: 14px;
-  z-index: 90;
-}
-.sidebar::-webkit-scrollbar { width: 4px; }
-.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-.sidebar .nav-group { margin-bottom: 20px; }
-.sidebar .nav-group-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-lighter);
-  padding: 0 20px;
-  margin-bottom: 6px;
-}
-.sidebar .nav-link {
-  display: block;
-  padding: 5px 20px 5px 24px;
-  color: var(--text-light);
-  font-weight: 400;
-  line-height: 1.5;
-  border-left: 3px solid transparent;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
-}
-.sidebar .nav-link:hover {
-  color: var(--accent);
-  background: var(--accent-light);
-  text-decoration: none;
-}
-.sidebar .nav-link.active {
-  color: var(--accent);
-  font-weight: 600;
-  border-left-color: var(--accent);
-  background: var(--accent-light);
-}
-
-/* ---- MAIN CONTENT ---- */
-.main-content {
-  margin-left: var(--sidebar-w);
-  margin-top: var(--header-h);
-  padding: 40px 48px 80px;
-  max-width: calc(var(--content-max) + 96px + var(--sidebar-w));
-}
-
-.content-inner {
-  max-width: var(--content-max);
-}
-
-/* ---- TYPOGRAPHY ---- */
-h1, h2, h3, h4 {
-  font-family: var(--font-heading);
-  color: var(--text);
-  line-height: 1.3;
-}
-h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
-h2 {
-  font-size: 24px;
-  font-weight: 700;
-  margin-top: 56px;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-light);
-}
-h3 { font-size: 18px; font-weight: 600; margin-top: 36px; margin-bottom: 10px; }
-h4 { font-size: 16px; font-weight: 600; margin-top: 28px; margin-bottom: 8px; }
-
-p { margin-bottom: 14px; }
-.lead {
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--text-light);
-  margin-bottom: 24px;
-}
-
-section { scroll-margin-top: 80px; }
-section + section { margin-top: 16px; }
-
-/* ---- CODE ---- */
-code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: var(--bg-code);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: var(--text);
-}
-
-pre {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  padding: 18px 20px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 16px 0 20px;
-  font-size: 13.5px;
-  line-height: 1.6;
-  tab-size: 4;
-}
-pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  color: inherit;
-  font-size: inherit;
-}
-pre .kw { color: #cba6f7; }
-pre .str { color: #a6e3a1; }
-pre .cmt { color: #6c7086; font-style: italic; }
-pre .num { color: #fab387; }
-pre .fn { color: #89b4fa; }
-pre .op { color: #89dceb; }
-pre .flag { color: #f9e2af; }
-pre .path { color: #94e2d5; }
-
-/* ---- TABLES ---- */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0 20px;
-  font-size: 14.5px;
-}
-th, td {
-  text-align: left;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-light);
-}
-th {
-  font-weight: 600;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text-light);
-  background: var(--bg-alt);
-  border-bottom: 2px solid var(--border);
-}
-td code { font-size: 0.85em; }
-tr:last-child td { border-bottom: none; }
-
-/* ---- CALLOUTS ---- */
-.callout {
-  padding: 16px 18px;
-  border-radius: 6px;
-  margin: 18px 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-.callout-title {
-  font-weight: 700;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
-}
-.callout-note {
-  background: #eef4fb;
-  border-left: 4px solid #3b82f6;
-}
-.callout-note .callout-title { color: #2563eb; }
-.callout-warn {
-  background: #fef9ec;
-  border-left: 4px solid #e5a50a;
-}
-.callout-warn .callout-title { color: #b07d09; }
-.callout-tip {
-  background: var(--accent-light);
-  border-left: 4px solid var(--accent);
-}
-.callout-tip .callout-title { color: var(--accent); }
-
-/* ---- BADGES ---- */
-.badge-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0 20px;
-}
-.badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-.badge-green { background: #dcfce7; color: #166534; }
-.badge-blue { background: #dbeafe; color: #1e40af; }
-.badge-gray { background: #f1f0ec; color: #555; }
-.badge-orange { background: #fef3c7; color: #92400e; }
-
-/* ---- DIRECTORY TREE ---- */
-.tree {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.7;
-  background: var(--bg-alt);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 16px 20px;
-  margin: 16px 0 20px;
-  overflow-x: auto;
-  white-space: pre;
-  color: var(--text-light);
-}
-.tree b { color: var(--text); font-weight: 600; }
-
-/* ---- FOOTER ---- */
-.site-footer {
-  margin-left: var(--sidebar-w);
-  padding: 32px 48px;
-  border-top: 1px solid var(--border-light);
-  font-size: 13px;
-  color: var(--text-lighter);
-}
-
-/* ---- HERO ---- */
-.hero-section { margin-bottom: 32px; }
-.hero-subtitle {
-  font-family: var(--font-heading);
-  font-size: 18px;
-  font-style: italic;
-  color: var(--text-light);
-  margin-bottom: 16px;
-}
-.version-badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-light);
-  margin-bottom: 20px;
-}
-
-/* ---- FEATURES GRID ---- */
-.features-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin: 20px 0 28px;
-}
-.feature-card {
-  padding: 18px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-}
-.feature-card h4 {
-  margin-top: 0;
-  margin-bottom: 6px;
-  font-family: var(--font-body);
-  font-size: 15px;
-  font-weight: 700;
-}
-.feature-card p {
-  font-size: 14px;
-  color: var(--text-light);
-  margin-bottom: 0;
-  line-height: 1.5;
-}
-
-/* ---- CONFIG SECTION ---- */
-.config-field {
-  margin-bottom: 12px;
-  padding-left: 14px;
-  border-left: 2px solid var(--border-light);
-}
-.config-field code:first-child {
-  font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-light);
-}
-
-/* ---- PIPELINE STEPS ---- */
-.pipeline-step {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-  align-items: flex-start;
-}
-.step-num {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 50%;
-  margin-top: 2px;
-}
-.step-body h4 { margin-top: 0; }
-.step-body p { margin-bottom: 0; font-size: 15px; }
-
-/* ---- RESPONSIVE ---- */
-@media (max-width: 900px) {
-  .sidebar {
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    z-index: 200;
-    width: 280px;
-    background: var(--bg);
-    box-shadow: 4px 0 20px var(--shadow);
-  }
-  .sidebar.open { transform: translateX(0); }
-  .menu-toggle { display: block; }
-  .main-content { margin-left: 0; padding: 32px 20px 60px; }
-  .site-footer { margin-left: 0; padding: 24px 20px; }
-  .features-grid { grid-template-columns: 1fr; }
-  .header-links .hide-mobile { display: none; }
-}
-@media (max-width: 480px) {
-  h1 { font-size: 26px; }
-  h2 { font-size: 20px; }
-  pre { font-size: 12.5px; padding: 14px 14px; }
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CiproSeg: LOSO U-Net Segmentation Framework</title>
+  <meta name="description"
+    content="CiproSeg is a PyTorch framework for binary cell segmentation using U-Net with Leave-One-Series-Out cross-validation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
-<!-- HEADER -->
-<header class="site-header">
-  <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">
-    <span></span><span></span><span></span>
-  </button>
-  <a href="#" class="logo">Cipro<span>Seg</span></a>
-  <div class="header-links">
-    <a href="#installation" class="hide-mobile">Install</a>
-    <a href="#quickstart" class="hide-mobile">Quick Start</a>
-    <a href="https://github.com/manazucd/CiproSeg" class="gh-link" target="_blank" rel="noopener">
-      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      GitHub
-    </a>
+  <!-- CINEMATIC HERO SCROLL -->
+  <div class="cinematic-wrapper" id="cinematic-wrapper">
+    <div class="cinematic-sticky">
+      <img src="resources/unsegmented_1.png" class="cinematic-img-layer cinematic-img-unseg" id="img-unseg" alt="">
+      <img src="resources/segmented_1.png" class="cinematic-img-layer cinematic-img-seg" id="img-seg" alt="">
+      <div class="cinematic-text-layer" id="cinematic-text">
+        <div class="cinematic-title">CiproSeg</div>
+        <div class="cinematic-subtitle">Leave-One-Series-Out U-Net Segmentation Framework</div>
+      </div>
+      <div class="scroll-indicator" id="scroll-ind">Scroll down</div>
+    </div>
   </div>
-</header>
 
-<!-- SIDEBAR -->
-<nav class="sidebar" id="sidebar">
-  <div class="nav-group">
-    <div class="nav-group-title">Getting Started</div>
-    <a href="#overview" class="nav-link active">Overview</a>
-    <a href="#installation" class="nav-link">Installation</a>
-    <a href="#quickstart" class="nav-link">Quick Start</a>
-    <a href="#dataset-layout" class="nav-link">Dataset Layout</a>
-  </div>
-  <div class="nav-group">
-    <div class="nav-group-title">User Guide</div>
-    <a href="#training" class="nav-link">Training</a>
-    <a href="#evaluation" class="nav-link">Evaluation</a>
-    <a href="#inference" class="nav-link">Inference</a>
-    <a href="#configuration" class="nav-link">Configuration</a>
-    <a href="#slurm" class="nav-link">SLURM / HPC</a>
-  </div>
-  <div class="nav-group">
-    <div class="nav-group-title">Architecture</div>
-    <a href="#how-it-works" class="nav-link">How It Works</a>
-    <a href="#models" class="nav-link">Models</a>
-    <a href="#data-pipeline" class="nav-link">Data Pipeline</a>
-    <a href="#metrics" class="nav-link">Metrics</a>
-  </div>
-  <div class="nav-group">
-    <div class="nav-group-title">Reference</div>
-    <a href="#project-structure" class="nav-link">Project Structure</a>
-    <a href="#extending" class="nav-link">Extending CiproSeg</a>
-    <a href="#testing" class="nav-link">Testing</a>
-    <a href="#design-decisions" class="nav-link">Design Decisions</a>
-    <a href="#citation" class="nav-link">Citation</a>
-  </div>
-</nav>
+  <!-- MAIN DOCUMENT CONTENT -->
+  <div id="doc-content">
 
-<!-- MAIN -->
-<main class="main-content">
-<div class="content-inner">
+    <!-- Ambient orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
 
-<!-- ============================== OVERVIEW ============================== -->
-<section id="overview">
-<div class="hero-section">
-  <h1>CiproSeg</h1>
-  <p class="hero-subtitle">A PyTorch framework for binary cell segmentation with Leave-One-Series-Out cross-validation</p>
-  <span class="version-badge">v0.1.0</span>
-  <div class="badge-row">
-    <span class="badge badge-green">Python 3.9+</span>
-    <span class="badge badge-blue">PyTorch 2.2+</span>
-    <span class="badge badge-gray">Apache-2.0</span>
-    <span class="badge badge-orange">Single GPU</span>
-  </div>
-</div>
+    <!-- HEADER -->
+    <header class="site-header">
+      <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <a href="#" class="logo">Cipro<span>Seg</span><span class="logo-dot"></span></a>
+      <div class="header-links">
+        <a href="#installation" class="hide-mobile">Install</a>
+        <a href="#quickstart" class="hide-mobile">Quick Start</a>
+        <a href="#how-it-works" class="hide-mobile">Architecture</a>
+        <a href="https://github.com/manazucd/CiproSeg" class="gh-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </header>
 
-<p>CiproSeg trains a U-Net on time-series microscopy data, holding out one experimental series at a time for testing. Each fold gets its own checkpoint, validation curves, and test metrics. At the end you have a per-fold breakdown of segmentation performance across the entire dataset with no data leakage, deterministic seeds, and a single config file controlling the whole run.</p>
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-group">
+        <div class="nav-group-title">Getting Started</div>
+        <a href="#overview" class="nav-link active">Overview</a>
+        <a href="#installation" class="nav-link">Installation</a>
+        <a href="#quickstart" class="nav-link">Quick Start</a>
+        <a href="#dataset-layout" class="nav-link">Dataset Layout</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">User Guide</div>
+        <a href="#training" class="nav-link">Training</a>
+        <a href="#run-summary" class="nav-link">Run Summary JSON</a>
+        <a href="#evaluation" class="nav-link">Evaluation</a>
+        <a href="#inference" class="nav-link">Inference</a>
+        <a href="#gui" class="nav-link">Web GUI</a>
+        <a href="#configuration" class="nav-link">Configuration</a>
+        <a href="#slurm" class="nav-link">SLURM / HPC</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Architecture</div>
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#models" class="nav-link">Models</a>
+        <a href="#data-pipeline" class="nav-link">Data Pipeline</a>
+        <a href="#metrics" class="nav-link">Metrics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Reference</div>
+        <a href="#project-structure" class="nav-link">Project Structure</a>
+        <a href="#extending" class="nav-link">Extending CiproSeg</a>
+        <a href="#testing" class="nav-link">Testing</a>
+        <a href="#design-decisions" class="nav-link">Design Decisions</a>
+        <a href="#citation" class="nav-link">Citation</a>
+        <a href="#acknowledgements" class="nav-link">Acknowledgements</a>
+      </div>
+    </nav>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<p>The framework was built for <em>E. coli</em> fluorescence microscopy experiments involving ciprofloxacin-treated and control populations, though it works with any binary segmentation task that follows the expected directory structure.</p>
+    <!-- MAIN -->
+    <main class="main-content">
+      <div class="content-inner">
 
-<div class="features-grid">
-  <div class="feature-card">
-    <h4>LOSO Cross-Validation</h4>
-    <p>Each experimental series is held out once as the test set. No data leakage, no cherry-picked folds.</p>
-  </div>
-  <div class="feature-card">
-    <h4>Self-Contained Checkpoints</h4>
-    <p>Every saved <code>.pt</code> file stores the full config, model weights, optimizer state, and fold metadata. Evaluate months later without hunting for config files.</p>
-  </div>
-  <div class="feature-card">
-    <h4>Tiled Inference</h4>
-    <p>Images larger than the training patch are split into overlapping tiles with averaged predictions in overlap regions. Padding handles small images automatically.</p>
-  </div>
-  <div class="feature-card">
-    <h4>One Config, Full Run</h4>
-    <p>A single YAML file controls model architecture, training hyperparameters, data paths, and scheduling. No scattered settings across multiple files.</p>
-  </div>
-</div>
-</section>
+        <!-- ======================== OVERVIEW ======================== -->
+        <section id="overview">
+          <div class="hero-section">
+            <div class="hero-title-wrap">
+              <h1>CiproSeg</h1>
+            </div>
+            <p class="hero-subtitle">A PyTorch framework for binary cell segmentation with Leave-One-Series-Out
+              cross-validation</p>
+            <span class="version-badge">v0.1.0 - Stable</span>
+            <div class="badge-row">
+              <span class="badge badge-green">⬢ Python 3.9+</span>
+              <span class="badge badge-blue">◈ PyTorch 2.2+</span>
+              <span class="badge badge-gray">⚖ Apache-2.0</span>
+              <span class="badge badge-orange">⊞ Single GPU</span>
+            </div>
+          </div>
 
-<!-- ============================== INSTALLATION ============================== -->
-<section id="installation">
-<h2>Installation</h2>
+          <p class="reveal">CiproSeg trains a U-Net on time-series microscopy data, holding out one experimental series
+            at a time for testing. Each fold gets its own checkpoint, validation curves, and test metrics. At the end
+            you have a per-fold breakdown of segmentation performance across the entire dataset with no data leakage,
+            deterministic seeds, and a single config file controlling the whole run.</p>
 
-<p>Clone the repository and install in editable mode:</p>
+          <p class="reveal">The framework was built for <em>E.&thinsp;coli</em> fluorescence microscopy experiments
+            involving ciprofloxacin-treated and control populations, though it works with any binary segmentation task
+            that follows the expected directory structure.</p>
 
-<pre><code><span class="fn">git</span> clone https://github.com/manazucd/CiproSeg.git
+          <!-- Image showcase -->
+          <div class="image-showcase reveal">
+            <div class="showcase-card">
+              <img src="resources/unsegmented_1.png" alt="Unsegmented microscopy image"
+                onerror="this.outerHTML='<div class=\'img-placeholder\'>unsegmented_1.png, add your image</div>'">
+              <div class="showcase-label"><span class="dot dot-input"></span> Raw Microscopy Input</div>
+            </div>
+            <div class="showcase-card">
+              <img src="resources/segmented_1.png" alt="Segmented result"
+                onerror="this.outerHTML='<div class=\'img-placeholder\'>segmented_1.png, add your image</div>'">
+              <div class="showcase-label"><span class="dot dot-output"></span> Segmented Output</div>
+            </div>
+          </div>
+
+          <div class="features-grid reveal">
+            <div class="feature-card">
+              <div class="feature-icon">🔄</div>
+              <h4>LOSO Cross-Validation</h4>
+              <p>Each experimental series is held out once as the test set. No data leakage, no cherry-picked folds.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">💾</div>
+              <h4>Self-Contained Checkpoints</h4>
+              <p>Every saved <code>.pt</code> file stores the full config, model weights, optimizer state, and fold
+                metadata.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🔲</div>
+              <h4>Tiled Inference</h4>
+              <p>Images larger than the training patch are split into overlapping tiles with averaged predictions in
+                overlap regions.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">⚙️</div>
+              <h4>One Config, Full Run</h4>
+              <p>A single YAML file controls model architecture, training hyperparameters, data paths, and scheduling.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================== INSTALLATION ======================== -->
+        <section id="installation" class="reveal">
+          <h2>Installation</h2>
+
+          <p>Clone the repository and install in editable mode:</p>
+
+          <pre><code><span class="fn">git</span> clone https://github.com/manazucd/CiproSeg.git
 <span class="fn">cd</span> CiproSeg
 <span class="fn">pip</span> install <span class="flag">-e</span> .</code></pre>
 
-<p>For development (adds pytest, ruff, mypy):</p>
+          <p>For development (adds pytest, ruff, mypy):</p>
 
-<pre><code><span class="fn">pip</span> install <span class="flag">-e</span> <span class="str">".[dev]"</span></code></pre>
+          <pre><code><span class="fn">pip</span> install <span class="flag">-e</span> <span class="str">".[dev]"</span></code></pre>
 
-<p>If your TIFF files use LZW or similar compression, you will also need:</p>
+          <p>For the optional browser-based GUI (<code>fastapi</code>, <code>uvicorn</code>):</p>
 
-<pre><code><span class="fn">pip</span> install imagecodecs</code></pre>
+          <pre><code><span class="fn">pip</span> install <span class="flag">-e</span> <span class="str">".[gui]"</span></code></pre>
 
-<p>Verify that the CLI entry points are working:</p>
+          <p>If your TIFF files use LZW or similar compression, you will also need:</p>
 
-<pre><code><span class="fn">ciproseg-train</span> <span class="flag">--help</span>
+          <pre><code><span class="fn">pip</span> install imagecodecs</code></pre>
+
+          <p>Verify that the CLI entry points are working:</p>
+
+          <pre><code><span class="fn">ciproseg-train</span> <span class="flag">--help</span>
 <span class="fn">ciproseg-eval</span>  <span class="flag">--help</span>
-<span class="fn">ciproseg-infer</span> <span class="flag">--help</span></code></pre>
+<span class="fn">ciproseg-infer</span> <span class="flag">--help</span>
+<span class="fn">ciproseg-gui</span>   <span class="flag">--help</span></code></pre>
 
-<div class="callout callout-note">
-  <div class="callout-title">Requirements</div>
-  Python 3.9 or newer and PyTorch 2.2 or newer. A CUDA GPU is recommended for training but not required. The full dependency list is in <code>requirements.txt</code>.
-</div>
-</section>
+          <div class="callout callout-note">
+            <div class="callout-title">ℹ️ Requirements</div>
+            Python 3.9 or newer and PyTorch 2.2 or newer. A CUDA GPU is recommended for training but not required. The
+            full dependency list is in <code>requirements.txt</code>.
+          </div>
+        </section>
 
-<!-- ============================== QUICKSTART ============================== -->
-<section id="quickstart">
-<h2>Quick Start</h2>
+        <!-- ======================== QUICKSTART ======================== -->
+        <section id="quickstart" class="reveal">
+          <h2>Quick Start</h2>
 
-<p>Once installed, a complete training run takes three steps:</p>
+          <p>Once installed, a complete training run takes three steps:</p>
 
-<div class="pipeline-step">
-  <div class="step-num">1</div>
-  <div class="step-body">
-    <h4>Organise your data</h4>
-    <p>Place images and masks into matched directory trees with one subfolder per experimental series. See <a href="#dataset-layout">Dataset Layout</a> for the full specification.</p>
-  </div>
-</div>
-<div class="pipeline-step">
-  <div class="step-num">2</div>
-  <div class="step-body">
-    <h4>Edit the config</h4>
-    <p>Open <code>configs/experiment.yaml</code> and set <code>dataset.root</code> to the path of your data folder. Adjust <code>model.name</code>, patch size, epochs, and other parameters as needed.</p>
-  </div>
-</div>
-<div class="pipeline-step">
-  <div class="step-num">3</div>
-  <div class="step-body">
-    <h4>Run training</h4>
-    <p>Launch the LOSO training loop. The framework handles fold construction, checkpointing, validation, and test evaluation automatically.</p>
-  </div>
-</div>
+          <div class="pipeline-step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>Organise your data</h4>
+              <p>Place images and masks into matched directory trees with one subfolder per experimental series. See <a
+                  href="#dataset-layout">Dataset Layout</a> for the full specification.</p>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>Edit the config</h4>
+              <p>Open <code>configs/experiment.yaml</code> and set <code>dataset.root</code> to the path of your data
+                folder. Adjust <code>model.name</code>, patch size, epochs, and other parameters as needed.</p>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>Run training</h4>
+              <p>Launch the LOSO training loop. The framework handles fold construction, checkpointing, validation, and
+                test evaluation automatically.</p>
+            </div>
+          </div>
 
-<pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span></code></pre>
+          <pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span></code></pre>
 
-<p>When training completes, results are written to a timestamped directory under <code>runs/</code>. Each fold gets its own checkpoint, training curves, and test metrics.</p>
+          <p>When training completes, results are written to a timestamped directory under <code>runs/</code>. Each fold
+            gets its own checkpoint, training curves, and test metrics.</p>
 
-<p>You can also run training from Python directly:</p>
+          <p>You can also run training from Python directly:</p>
 
-<pre><code><span class="kw">from</span> ciproseg.utils.config <span class="kw">import</span> load_config
+          <pre><code><span class="kw">from</span> ciproseg.utils.config <span class="kw">import</span> load_config
 <span class="kw">from</span> ciproseg.core.engine <span class="kw">import</span> Engine
 
 cfg = load_config(<span class="str">"configs/experiment.yaml"</span>)
 Engine(cfg).fit()</code></pre>
-</section>
+        </section>
 
-<!-- ============================== DATASET LAYOUT ============================== -->
-<section id="dataset-layout">
-<h2>Dataset Layout</h2>
+        <!-- ======================== DATASET LAYOUT ======================== -->
+        <section id="dataset-layout" class="reveal">
+          <h2>Dataset Layout</h2>
 
-<p>CiproSeg expects images and masks in matched directory trees. Each subdirectory under <code>images/</code> and <code>masks/</code> represents one experimental series. One series is held out per LOSO fold.</p>
+          <p>CiproSeg expects images and masks in matched directory trees. Each subdirectory under <code>images/</code>
+            and <code>masks/</code> represents one experimental series. One series is held out per LOSO fold.</p>
 
-<div class="tree"><b>your_data/</b>
-  <b>images/</b>
-    <b>series_A/</b>
-      frame_000.tif
-      frame_001.tif
-      ...
-    <b>series_B/</b>
-      ...
-  <b>masks/</b>
-    <b>series_A/</b>
-      frame_000.tif
-      frame_001.tif
-      ...
-    <b>series_B/</b>
-      ...</div>
+          <div class="tree"><b>your_data/</b>
+            <b>images/</b>
+            <b>series_A/</b>
+            frame_000.tif
+            frame_001.tif
+            ...
+            <b>series_B/</b>
+            ...
+            <b>masks/</b>
+            <b>series_A/</b>
+            frame_000.tif
+            frame_001.tif
+            ...
+            <b>series_B/</b>
+            ...
+          </div>
 
-<p>Filenames must match exactly between <code>images/&lt;series&gt;/</code> and <code>masks/&lt;series&gt;/</code>. The build step will raise an error if there is any mismatch. Supported formats are <code>.tif</code>, <code>.tiff</code>, <code>.png</code>, <code>.jpg</code>, and <code>.jpeg</code>.</p>
+          <p>Filenames must match exactly between <code>images/&lt;series&gt;/</code> and
+            <code>masks/&lt;series&gt;/</code>. The build step will raise an error if there is any mismatch. Supported
+            formats are <code>.tif</code>, <code>.tiff</code>, <code>.png</code>, <code>.jpg</code>, and
+            <code>.jpeg</code>.
+          </p>
 
-<p>Masks should be binary: any nonzero pixel is treated as foreground. Internally, the framework reads masks with a threshold of 128, so values of 255 for foreground and 0 for background work well.</p>
+          <p>Masks should be binary: any nonzero pixel is treated as foreground. Internally, the framework reads masks
+            with a threshold of 128, so values of 255 for foreground and 0 for background work well.</p>
 
-<p>You can verify that your dataset is correctly paired by running the included check tool:</p>
+          <p>You can verify that your dataset is correctly paired by running the included check tool:</p>
 
-<pre><code><span class="fn">python</span> tools/check_dataset_pairs.py <span class="path">/path/to/your_data</span></code></pre>
-</section>
+          <pre><code><span class="fn">python</span> tools/check_dataset_pairs.py <span class="path">/path/to/your_data</span></code></pre>
+        </section>
 
-<!-- ============================== TRAINING ============================== -->
-<section id="training">
-<h2>Training</h2>
+        <!-- ======================== TRAINING ======================== -->
+        <section id="training" class="reveal">
+          <h2>Training</h2>
 
-<pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span></code></pre>
+          <pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span></code></pre>
 
-<p>This builds a LOSO cross-validation loop: for N series, N folds run sequentially. Each fold trains on N-1 series (split 80/20 into train/val by temporal order), then evaluates on the held-out series. Best checkpoints are selected by validation Dice score.</p>
+          <p>This builds a LOSO cross-validation loop: for N series, N folds run sequentially. In each fold, one
+            complete series is held out as the test series. Frames from the remaining series are split by temporal order
+            into training and validation subsets according to <code>dataset.train_frac</code> (for example,
+            <code>0.8</code> gives an 80/20 train/validation split).</p>
 
-<p>You can override the seed or force CPU mode from the command line:</p>
+          <h3>Validation during training</h3>
+          <p>Validation is performed periodically during training (every 10 epochs, with the final epoch also validated).
+            The probability map is binarised using <code>validation.checkpoint_threshold</code> -- normally
+            <code>0.5</code> -- and the validation metrics are computed. The checkpoint with the highest validation Dice
+            is saved as <code>best.pt</code>. This threshold is used for checkpoint selection; it is not necessarily the
+            final threshold used for test evaluation or inference.</p>
 
-<pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span> <span class="flag">--seed</span> <span class="num">42</span>
+          <h3>Threshold selection after training</h3>
+          <p>After training a fold, CiproSeg reloads that fold's <code>best.pt</code> and performs a threshold sweep on
+            the <strong>validation set only</strong>. Each value listed in
+            <code>validation.sweeping_thresholds</code> is applied to the same validation probability maps. Dice, IoU,
+            precision, and recall are averaged across validation frames, and the threshold with the highest mean
+            validation Dice is selected.</p>
+
+          <div class="callout callout-note">
+            <div class="callout-title">Validation selects the threshold</div>
+            The held-out test series is never used to choose the threshold. Once the validation-selected threshold is
+            fixed, it is applied once to the held-out test series to report final test metrics.
+          </div>
+
+          <p>You can override the seed or force CPU mode from the command line:</p>
+
+          <pre><code><span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span> <span class="flag">--seed</span> <span class="num">42</span>
 <span class="fn">ciproseg-train</span> <span class="flag">--config</span> <span class="path">configs/experiment.yaml</span> <span class="flag">--cpu</span></code></pre>
 
-<h3>Output structure</h3>
+          <h3>Output structure</h3>
 
-<p>Each run creates a unique timestamped directory. Nothing is ever overwritten.</p>
+          <p>Each run creates a unique timestamped directory. Nothing is ever overwritten.</p>
 
-<div class="tree"><b>runs/unet4/2026-04-03_153000/</b>
-  config.yaml
-  config_resolved.yaml
-  train.log
-  run_summary.pt
-  run_summary.json
-  <b>fold_01_test_seriesA/</b>
-    best.pt
-    best.json
-    last.pt
-    last.json
-    loss.png
-    dice.png
-  <b>fold_02_test_seriesB/</b>
-    ...</div>
+          <div class="tree"><b>runs/&lt;config&gt;/&lt;model&gt;/&lt;timestamp&gt;/</b>
+            config_resolved.yaml
+            train.log
+            run_summary.pt
+            run_summary.json
+            <b>fold_01_test_seriesA/</b>
+            best.pt
+            best.json
+            last.pt
+            last.json
+            loss.png
+            dice.png
+            <b>fold_02_test_seriesB/</b>
+            ...
+          </div>
 
-<p><code>config.yaml</code> is the experiment config as passed in. <code>config_resolved.yaml</code> includes all runtime overrides and the resolved output path. <code>train.log</code> captures epoch losses, validation metrics, and fold summaries. Each fold directory contains the best and latest checkpoints, JSON sidecars with metadata, and training curve plots.</p>
+          <p><code>config_resolved.yaml</code> records the configuration used for the run.
+            <code>train.log</code> captures epoch losses, validation metrics, and fold summaries. Each fold directory
+            contains the best and latest checkpoints, JSON sidecars with checkpoint metadata, and training curves.
+            The top-level <code>run_summary.json</code> is the easiest file to inspect when choosing the correct
+            fold-specific threshold for later evaluation or inference.</p>
 
-<h3>Checkpoint contents</h3>
+          <h3>Checkpoint contents</h3>
 
-<p>Every <code>.pt</code> file is a dictionary with the following keys:</p>
+          <p>Every <code>.pt</code> file is a dictionary with the following keys:</p>
 
-<table>
-<tr><th>Key</th><th>Description</th></tr>
-<tr><td><code>model</code></td><td>Model state dict (weights and buffers)</td></tr>
-<tr><td><code>optim</code></td><td>Optimizer state dict</td></tr>
-<tr><td><code>sched</code></td><td>Scheduler state dict (or <code>None</code>)</td></tr>
-<tr><td><code>cfg</code></td><td>Full experiment config used for the run</td></tr>
-<tr><td><code>fold_name</code></td><td>Fold identifier, e.g. <code>fold_01_test_seriesA</code></td></tr>
-<tr><td><code>fold_id</code></td><td>Numeric fold index</td></tr>
-<tr><td><code>best_val_metric</code></td><td>Best validation Dice observed during training</td></tr>
-<tr><td><code>epoch</code></td><td>Epoch at which checkpoint was saved</td></tr>
-</table>
+          <table>
+            <tr>
+              <th>Key</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>model</code></td>
+              <td>Model state dict (weights and buffers)</td>
+            </tr>
+            <tr>
+              <td><code>optim</code></td>
+              <td>Optimizer state dict</td>
+            </tr>
+            <tr>
+              <td><code>sched</code></td>
+              <td>Scheduler state dict (or <code>None</code>)</td>
+            </tr>
+            <tr>
+              <td><code>cfg</code></td>
+              <td>Full experiment config used for the run</td>
+            </tr>
+            <tr>
+              <td><code>fold_name</code></td>
+              <td>Fold identifier, e.g. <code>fold_01_test_seriesA</code></td>
+            </tr>
+            <tr>
+              <td><code>fold_id</code></td>
+              <td>Numeric fold index</td>
+            </tr>
+            <tr>
+              <td><code>best_val_metric</code></td>
+              <td>Best validation Dice observed during training</td>
+            </tr>
+            <tr>
+              <td><code>epoch</code></td>
+              <td>Epoch at which checkpoint was saved</td>
+            </tr>
+          </table>
 
-<p>The JSON sidecar files (<code>best.json</code>, <code>last.json</code>) store the same metadata minus the large tensors, so you can browse results without calling <code>torch.load</code>.</p>
-</section>
+          <p>The JSON sidecar files (<code>best.json</code>, <code>last.json</code>) store the same metadata minus the
+            large tensors, so you can browse results without calling <code>torch.load</code>.</p>
+        </section>
 
-<!-- ============================== EVALUATION ============================== -->
-<section id="evaluation">
-<h2>Evaluation</h2>
 
-<p>Point <code>ciproseg-eval</code> at any checkpoint. Everything it needs is stored inside the <code>.pt</code> file:</p>
+        <!-- ======================== RUN SUMMARY ======================== -->
+        <section id="run-summary" class="reveal">
+          <h2>Run Summary JSON</h2>
 
-<pre><code><span class="fn">ciproseg-eval</span> <span class="flag">--ckpt</span> <span class="path">runs/unet4/.../fold_01_test_seriesA/best.pt</span></code></pre>
+          <p>At the end of a LOSO run, CiproSeg writes <code>run_summary.json</code>. The file can be large because it
+            stores fold-level test metrics and the complete validation threshold sweep, but only a few fields are needed
+            for most day-to-day use.</p>
 
-<p>The evaluator loads the model architecture from the saved config, restores the weights, identifies the held-out test series from the fold name, and runs tiled inference over every frame in that series.</p>
+          <h3>Most important fields</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Meaning</th>
+            </tr>
+            <tr>
+              <td><code>best_validation_thresholds</code></td>
+              <td>Compact per-fold lookup table containing <code>fold_id</code>, the corresponding
+                <code>held_out_series</code>, and the validation-selected threshold. This is the quickest place to look
+                before inference.</td>
+            </tr>
+            <tr>
+              <td><code>best_validation_dice_across_folds</code></td>
+              <td>The highest checkpoint-selection validation Dice recorded across the folds. It is a validation
+                quantity, not a test-set score.</td>
+            </tr>
+            <tr>
+              <td><code>mean_test_metrics_across_folds</code></td>
+              <td>Mean final held-out test metrics across all LOSO folds.</td>
+            </tr>
+            <tr>
+              <td><code>fold_results</code></td>
+              <td>Detailed record for every fold, including the best checkpoint epoch, threshold selection record, and
+                final test metrics.</td>
+            </tr>
+            <tr>
+              <td><code>threshold_selection.selected_threshold</code></td>
+              <td>The threshold selected from that fold's validation set by maximising mean validation Dice.</td>
+            </tr>
+            <tr>
+              <td><code>threshold_selection.metrics_by_threshold</code></td>
+              <td>Validation Dice, IoU, precision, and recall for every candidate threshold that was swept.</td>
+            </tr>
+            <tr>
+              <td><code>test_metrics</code></td>
+              <td>Final metrics on the fold's held-out test series after applying the already selected validation
+                threshold.</td>
+            </tr>
+          </table>
 
-<p>Output is printed to the terminal:</p>
+          <h3>Abbreviated example</h3>
+          <pre><code>{
+  "best_validation_thresholds": [
+    {
+      "fold_id": 1,
+      "held_out_series": "seriesA",
+      "threshold": 0.45
+    },
+    {
+      "fold_id": 2,
+      "held_out_series": "seriesB",
+      "threshold": 0.50
+    }
+  ],
 
-<pre><code>------------------------------------------------------------
+  "best_validation_dice_across_folds": 0.91,
+
+  "mean_test_metrics_across_folds": {
+    "dice": 0.86,
+    "iou": 0.76,
+    "precision": 0.88,
+    "recall": 0.85
+  },
+
+  "fold_results": [
+    {
+      "fold_id": 1,
+      "fold_name": "fold_01_test_seriesA",
+      "test_series": "seriesA",
+      "best_checkpoint_validation_dice": 0.90,
+      "best_checkpoint_epoch": 240,
+
+      "threshold_selection": {
+        "selection_set": "validation",
+        "selection_metric": "dice",
+        "selected_threshold": 0.45,
+        "selected_metric_value": 0.91,
+        "candidate_thresholds": [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60],
+        "metrics_by_threshold": {
+          "...": "validation metrics for each threshold"
+        }
+      },
+
+      "test_metrics": {
+        "...": "final held-out test metrics"
+      }
+    }
+  ]
+}</code></pre>
+
+          <div class="callout callout-note">
+            <div class="callout-title">The JSON example above is schematic</div>
+            The numbers and series names are only illustrative. Use the values written by your own training run.
+          </div>
+
+          <h3>Selecting the threshold for inference</h3>
+          <p>The checkpoint and threshold must come from the <strong>same fold</strong>. First identify which fold's
+            <code>best.pt</code> you want to use. Then look up that fold in
+            <code>best_validation_thresholds</code> and copy its <code>threshold</code> value.</p>
+
+          <pre><code><span class="cmt"># Example: run_summary.json says fold 1 / seriesA uses threshold 0.45</span>
+<span class="fn">ciproseg-infer</span> \
+  <span class="flag">--ckpt</span> <span class="path">runs/.../fold_01_test_seriesA/best.pt</span> \
+  <span class="flag">--input</span> <span class="path">path/to/images/</span> \
+  <span class="flag">--output</span> <span class="path">predictions/</span> \
+  <span class="flag">--threshold</span> <span class="num">0.45</span></code></pre>
+
+          <p>Do not automatically use <code>0.5</code> for inference merely because
+            <code>validation.checkpoint_threshold</code> is <code>0.5</code>. The checkpoint threshold is used during
+            periodic validation for checkpoint selection. When threshold sweeping is enabled, the fold-specific
+            <code>selected_threshold</code> is the threshold intended for final binarisation.</p>
+        </section>
+
+        <!-- ======================== EVALUATION ======================== -->
+        <section id="evaluation" class="reveal">
+          <h2>Evaluation</h2>
+
+          <p>Point <code>ciproseg-eval</code> at a checkpoint. The checkpoint stores the model and fold metadata.
+            To reproduce the final fold evaluation, also pass the validation-selected threshold recorded for that fold
+            in <code>run_summary.json</code>:</p>
+
+          <pre><code><span class="fn">ciproseg-eval</span>   <span class="flag">--ckpt</span> <span class="path">runs/.../fold_01_test_seriesA/best.pt</span>   <span class="flag">--thr</span> <span class="num">0.45</span></code></pre>
+
+          <p>The evaluator loads the model architecture from the saved config, restores the weights, identifies the
+            held-out test series from the fold name, and runs tiled inference over every frame in that series.</p>
+
+          <p>Output is printed to the terminal:</p>
+
+          <pre><code>------------------------------------------------------------
   Checkpoint : runs/.../fold_01_test_seriesA/best.pt
   Fold       : fold_01_test_seriesA
   Test series: seriesA
@@ -722,48 +558,105 @@ Engine(cfg).fit()</code></pre>
   Loss (BCE) : 0.14523
 ------------------------------------------------------------</code></pre>
 
-<h3>Useful flags</h3>
+          <h3>Useful flags</h3>
 
-<table>
-<tr><th>Flag</th><th>Purpose</th></tr>
-<tr><td><code>--json metrics.json</code></td><td>Write metrics to a JSON file</td></tr>
-<tr><td><code>--cpu</code></td><td>Force CPU evaluation</td></tr>
-<tr><td><code>--dataset-root /new/path</code></td><td>Override the dataset path stored in the checkpoint</td></tr>
-<tr><td><code>--patch 512 --stride 256</code></td><td>Override tiling parameters</td></tr>
-<tr><td><code>--thr 0.45</code></td><td>Use a different binarisation threshold</td></tr>
-</table>
-</section>
+          <table>
+            <tr>
+              <th>Flag</th>
+              <th>Purpose</th>
+            </tr>
+            <tr>
+              <td><code>--json metrics.json</code></td>
+              <td>Write metrics to a JSON file</td>
+            </tr>
+            <tr>
+              <td><code>--cpu</code></td>
+              <td>Force CPU evaluation</td>
+            </tr>
+            <tr>
+              <td><code>--dataset-root /new/path</code></td>
+              <td>Override the dataset path stored in the checkpoint</td>
+            </tr>
+            <tr>
+              <td><code>--patch 512 --stride 256</code></td>
+              <td>Override tiling parameters</td>
+            </tr>
+            <tr>
+              <td><code>--thr 0.45</code></td>
+              <td>Use a different binarisation threshold</td>
+            </tr>
+          </table>
+        </section>
 
-<!-- ============================== INFERENCE ============================== -->
-<section id="inference">
-<h2>Inference</h2>
+        <!-- ======================== INFERENCE ======================== -->
+        <section id="inference" class="reveal">
+          <h2>Inference</h2>
 
-<p>Run a trained model on a directory of images to produce segmentation masks and overlays:</p>
+          <p>Run a trained model on a directory of images using the threshold selected on the validation set for that
+            same fold. The easiest place to find it is <code>run_summary.json &rarr; best_validation_thresholds</code>.</p>
 
-<pre><code><span class="fn">ciproseg-infer</span> \
+          <pre><code><span class="fn">ciproseg-infer</span> \
   <span class="flag">--ckpt</span> <span class="path">runs/.../fold_01_test_seriesA/best.pt</span> \
-  <span class="flag">--input</span> <span class="path">path/to/images/seriesA/</span></code></pre>
+  <span class="flag">--input</span> <span class="path">path/to/images/seriesA/</span> \
+  <span class="flag">--output</span> <span class="path">predictions/seriesA/</span> \
+  <span class="flag">--threshold</span> <span class="num">0.45</span></code></pre>
 
-<p>For each input image (say <code>frame_001.tif</code>), the following files are written:</p>
+          <p>For each input image (say <code>frame_001.tif</code>), the following files are written:</p>
 
-<table>
-<tr><th>File</th><th>Description</th></tr>
-<tr><td><code>frame_001_prob.png</code></td><td>16-bit probability map (0 = background, 65535 = cell)</td></tr>
-<tr><td><code>frame_001_binary.png</code></td><td>Binary mask after thresholding (0 or 255)</td></tr>
-<tr><td><code>frame_001_pred_overlay.png</code></td><td>Input image with predicted boundaries drawn in green</td></tr>
-</table>
+          <table>
+            <tr>
+              <th>File</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>frame_001_prob.npy</code></td>
+              <td>Original <code>float32</code> probability map with values in [0, 1]. This is the authoritative numerical
+                probability output and can be re-thresholded later without rerunning the U-Net.</td>
+            </tr>
+            <tr>
+              <td><code>frame_001_prob.png</code></td>
+              <td>16-bit visualisation of the probability map. Probabilities in [0, 1] are mapped to integer intensities
+                in [0, 65535].</td>
+            </tr>
+            <tr>
+              <td><code>frame_001_binary.png</code></td>
+              <td>Binary mask produced using the chosen threshold. Pixels are 0 for background and 255 for foreground.</td>
+            </tr>
+            <tr>
+              <td><code>frame_001_pred_overlay.png</code></td>
+              <td>Input image with predicted boundaries drawn in green</td>
+            </tr>
+          </table>
 
-<p>When you also provide ground-truth masks with <code>--masks</code>, two additional files are generated per image:</p>
+          <div class="callout callout-tip">
+            <div class="callout-title">Which output should downstream analysis use?</div>
+            Connected Components, watershed, cell counting, and morphology analysis should normally start from
+            <code>*_binary.png</code>. Use <code>*_prob.npy</code> when you want to apply a different threshold later
+            without rerunning the neural network. The <code>*_prob.png</code> file is primarily a convenient visual
+            representation of the probability map.
+          </div>
 
-<table>
-<tr><th>File</th><th>Description</th></tr>
-<tr><td><code>frame_001_gt_overlay.png</code></td><td>Input image with ground-truth boundaries in cyan</td></tr>
-<tr><td><code>frame_001_diff.png</code></td><td>Colour-coded difference map: TP green, FP red, FN blue, TN dark</td></tr>
-</table>
+          <p>When you also provide ground-truth masks with <code>--masks</code>, two additional files are generated per
+            image:</p>
 
-<h3>Full example</h3>
+          <table>
+            <tr>
+              <th>File</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>frame_001_gt_overlay.png</code></td>
+              <td>Input image with ground-truth boundaries in cyan</td>
+            </tr>
+            <tr>
+              <td><code>frame_001_diff.png</code></td>
+              <td>Colour-coded difference map: TP green, FP red, FN blue, TN dark</td>
+            </tr>
+          </table>
 
-<pre><code><span class="fn">ciproseg-infer</span> \
+          <h3>Full example</h3>
+
+          <pre><code><span class="fn">ciproseg-infer</span> \
   <span class="flag">--ckpt</span> <span class="path">.../best.pt</span> \
   <span class="flag">--input</span> <span class="path">path/to/images/seriesA/</span> \
   <span class="flag">--masks</span> <span class="path">path/to/masks/seriesA/</span> \
@@ -772,312 +665,750 @@ Engine(cfg).fit()</code></pre>
   <span class="flag">--patch</span> <span class="num">512</span> \
   <span class="flag">--stride</span> <span class="num">256</span></code></pre>
 
-<p>Other options: <code>--cpu</code>, <code>--device cuda:1</code>, <code>--verbose</code> (enables DEBUG-level per-file logging).</p>
-</section>
+          <p>Other options: <code>--cpu</code>, <code>--device cuda:1</code>, <code>--verbose</code> (enables
+            DEBUG-level per-file logging).</p>
+        </section>
 
-<!-- ============================== CONFIGURATION ============================== -->
-<section id="configuration">
-<h2>Configuration Reference</h2>
+        <!-- ======================== WEB GUI ======================== -->
+        <section id="gui" class="reveal">
+          <h2>Web GUI</h2>
 
-<p>The experiment config (<code>configs/experiment.yaml</code>) is the single source of truth for a CiproSeg training run. All sections are described below.</p>
+          <p>CiproSeg ships with an optional browser-based interface for users who prefer not to work from the command
+            line. The GUI wraps the same CLI commands described above; it does not replace them.</p>
 
-<h3>dataset</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>name</code></td><td>Dataset loader identifier. Currently only <code>ciproseg_ecoli</code> is supported.</td></tr>
-<tr><td><code>root</code></td><td>Absolute path to the dataset directory containing image/mask pairs.</td></tr>
-<tr><td><code>train_frac</code></td><td>Fraction of non-test frames used for training within each fold. The remainder becomes the validation set. Default: <code>0.8</code>.</td></tr>
-<tr><td><code>patch</code></td><td>Crop size in pixels for training patches. Must be divisible by 16 for <code>unet4</code> or by 4 for <code>unet2</code>.</td></tr>
-<tr><td><code>stride</code></td><td>Stride for tiled inference on validation and test frames. Smaller values produce smoother predictions at the cost of speed.</td></tr>
-</table>
+          <pre><code><span class="fn">ciproseg-gui</span></code></pre>
 
-<h3>model</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>name</code></td><td>Architecture variant. <code>unet2</code> uses 2 encoder/decoder levels; <code>unet4</code> uses 4 levels (recommended).</td></tr>
-<tr><td><code>in_channels</code></td><td>Number of input channels. Set to <code>1</code> for grayscale microscopy.</td></tr>
-<tr><td><code>out_channels</code></td><td>Number of output channels. Set to <code>1</code> for binary segmentation.</td></tr>
-<tr><td><code>base_channels</code></td><td>Feature maps in the first encoder block. Doubles at each subsequent level.</td></tr>
-</table>
+          <p>This opens a browser tab at <code>http://127.0.0.1:7860</code> with pages for training configuration, live
+            training monitoring, evaluation, inference with side-by-side image viewing, results browsing, and cross-fold
+            comparison.</p>
 
-<h3>trainer</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>epochs</code></td><td>Training epochs per fold.</td></tr>
-<tr><td><code>batch_size</code></td><td>Patches per gradient step.</td></tr>
-<tr><td><code>num_workers</code></td><td>DataLoader workers. Set to <code>0</code> for debugging.</td></tr>
-<tr><td><code>seed</code></td><td>Base random seed. Each fold derives its seed as <code>seed + 1000 * fold_id</code>.</td></tr>
-<tr><td><code>thr</code></td><td>Sigmoid threshold for binarising model output during evaluation.</td></tr>
-<tr><td><code>target_patches_per_epoch</code></td><td>Controls how many random crops are sampled per epoch. The per-frame crop count is derived from this.</td></tr>
-<tr><td><code>deterministic</code></td><td>Enables PyTorch deterministic mode. Slower but fully reproducible.</td></tr>
-<tr><td><code>benchmark</code></td><td>Enables <code>cudnn.benchmark</code>. Faster on fixed input sizes.</td></tr>
-<tr><td><code>cpu</code></td><td>Force CPU training even when a GPU is available.</td></tr>
-<tr><td><code>output_dir</code></td><td>Root directory for outputs. Each run creates a timestamped subdirectory.</td></tr>
-</table>
+          <p>On launch, the GUI loads <code>configs/experiment.yaml</code> (if present) and populates the form fields
+            automatically. All training, evaluation, and inference parameters can be edited directly in the browser
+            without touching any YAML files.</p>
 
-<h3>optim</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>name</code></td><td>Optimizer. Supported: <code>adam</code>, <code>adamw</code> (default), <code>sgd</code>.</td></tr>
-<tr><td><code>lr</code></td><td>Initial learning rate.</td></tr>
-<tr><td><code>weight_decay</code></td><td>L2 regularisation. Bias and normalisation parameters are automatically excluded.</td></tr>
-</table>
+          <h3>Options</h3>
 
-<h3>sched</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>name</code></td><td>Scheduler. <code>none</code> keeps the LR constant. Also supports <code>cosine</code>, <code>step</code>, and <code>onecycle</code>.</td></tr>
-<tr><td><code>tmax</code></td><td>(Cosine only) Epochs over which the LR anneals from <code>lr</code> to zero.</td></tr>
-</table>
+          <table>
+            <tr>
+              <th>Flag</th>
+              <th>Purpose</th>
+            </tr>
+            <tr>
+              <td><code>--port 8080</code></td>
+              <td>Use a custom port instead of the default 7860</td>
+            </tr>
+            <tr>
+              <td><code>--no-browser</code></td>
+              <td>Start the server without auto-opening the browser</td>
+            </tr>
+            <tr>
+              <td><code>--host 0.0.0.0</code></td>
+              <td>Bind to all interfaces for remote access (e.g. from another machine on the network)</td>
+            </tr>
+          </table>
 
-<h3>logger</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>name</code></td><td>Logger identifier used in log output.</td></tr>
-<tr><td><code>level</code></td><td>Logging verbosity: <code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code>.</td></tr>
-</table>
+          <p>If a port is already in use (say, another GUI instance is running), the server automatically finds the next
+            available port. Multiple instances can run side by side without manual port management.</p>
 
-<h3>Example config</h3>
+          <pre><code><span class="fn">ciproseg-gui</span> <span class="flag">--port</span> <span class="num">8080</span>            <span class="cmt"># custom port</span>
+<span class="fn">ciproseg-gui</span> <span class="flag">--no-browser</span>           <span class="cmt"># skip auto-opening the browser</span>
+<span class="fn">ciproseg-gui</span> <span class="flag">--host</span> <span class="num">0.0.0.0</span>        <span class="cmt"># bind to all interfaces (remote access)</span></code></pre>
 
-<pre><code><span class="cmt"># configs/experiment.yaml</span>
+          <div class="callout callout-note">
+            <div class="callout-title">ℹ️ Dependencies</div>
+            The GUI requires the <code>[gui]</code> optional dependencies (<code>fastapi</code>,
+            <code>uvicorn</code>). If these are not installed, the core CLI tools remain fully functional. See
+            <a href="#installation">Installation</a> for setup instructions.
+          </div>
+        </section>
+
+        <!-- ======================== CONFIGURATION ======================== -->
+        <section id="configuration" class="reveal">
+          <h2>Configuration Reference</h2>
+
+          <p>The experiment config (<code>configs/experiment.yaml</code>) is the single source of truth for a CiproSeg
+            training run. All sections are described below.</p>
+
+          <h3>dataset</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>Dataset loader identifier. Currently only <code>ciproseg_ecoli</code> is supported.</td>
+            </tr>
+            <tr>
+              <td><code>root</code></td>
+              <td>Absolute path to the dataset directory containing image/mask pairs.</td>
+            </tr>
+            <tr>
+              <td><code>train_frac</code></td>
+              <td>Fraction of non-test frames used for training within each fold. Default: <code>0.8</code>.</td>
+            </tr>
+            <tr>
+              <td><code>patch</code></td>
+              <td>Crop size in pixels for training patches. Must be divisible by 16 for <code>unet4</code> or by 4 for
+                <code>unet2</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><code>stride</code></td>
+              <td>Stride for tiled inference on validation and test frames.</td>
+            </tr>
+          </table>
+
+          <h3>model</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>Architecture variant. <code>unet2</code> uses 2 levels; <code>unet4</code> uses 4 levels
+                (recommended).</td>
+            </tr>
+            <tr>
+              <td><code>in_channels</code></td>
+              <td>Number of input channels. Set to <code>1</code> for grayscale microscopy.</td>
+            </tr>
+            <tr>
+              <td><code>out_channels</code></td>
+              <td>Number of output channels. Set to <code>1</code> for binary segmentation.</td>
+            </tr>
+            <tr>
+              <td><code>base_channels</code></td>
+              <td>Feature maps in the first encoder block. Doubles at each subsequent level.</td>
+            </tr>
+          </table>
+
+          <h3>trainer</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>epochs</code></td>
+              <td>Training epochs per fold.</td>
+            </tr>
+            <tr>
+              <td><code>batch_size</code></td>
+              <td>Patches per gradient step.</td>
+            </tr>
+            <tr>
+              <td><code>num_workers</code></td>
+              <td>DataLoader workers. Set to <code>0</code> for debugging.</td>
+            </tr>
+            <tr>
+              <td><code>seed</code></td>
+              <td>Base random seed. Each fold derives its seed as <code>seed + 1000 * fold_id</code>.</td>
+            </tr>
+            <tr>
+              <td><code>target_patches_per_epoch</code></td>
+              <td>Controls how many random crops are sampled per epoch.</td>
+            </tr>
+            <tr>
+              <td><code>deterministic</code></td>
+              <td>Enables PyTorch deterministic mode. Slower but more reproducible.</td>
+            </tr>
+            <tr>
+              <td><code>benchmark</code></td>
+              <td>Enables <code>cudnn.benchmark</code>. Faster on fixed input sizes.</td>
+            </tr>
+            <tr>
+              <td><code>cpu</code></td>
+              <td>Force CPU training even when a GPU is available.</td>
+            </tr>
+            <tr>
+              <td><code>output_dir</code></td>
+              <td>Root directory for outputs. Each run creates a timestamped subdirectory.</td>
+            </tr>
+            <tr>
+              <td><code>amp</code></td>
+              <td>Enable automatic mixed-precision training when supported.</td>
+            </tr>
+            <tr>
+              <td><code>early_stop_patience</code></td>
+              <td>Number of validation checks without improvement allowed before early stopping.</td>
+            </tr>
+            <tr>
+              <td><code>test_tta</code></td>
+              <td>Enable test-time augmentation for final full-image evaluation.</td>
+            </tr>
+            <tr>
+              <td><code>compute_object_metrics</code></td>
+              <td>Also compute object-level counts and matching metrics during final test evaluation.</td>
+            </tr>
+          </table>
+
+          <h3>validation</h3>
+          <p>Threshold handling is deliberately separated from the trainer settings. The configuration used by the
+            current workflow is:</p>
+
+          <pre><code><span class="fn">validation</span>:
+  <span class="fn">checkpoint_threshold</span>: <span class="num">0.5</span>
+  <span class="fn">threshold_sweep</span>: <span class="kw">true</span>
+  <span class="fn">sweeping_thresholds</span>: [<span class="num">0.30</span>, <span class="num">0.35</span>, <span class="num">0.40</span>, <span class="num">0.45</span>, <span class="num">0.50</span>, <span class="num">0.55</span>, <span class="num">0.60</span>]</code></pre>
+
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>checkpoint_threshold</code></td>
+              <td>Threshold used during periodic validation to compute binary validation metrics and decide whether the
+                current checkpoint becomes <code>best.pt</code>. Default convention: <code>0.5</code>.</td>
+            </tr>
+            <tr>
+              <td><code>threshold_sweep</code></td>
+              <td>When <code>true</code>, the best checkpoint is re-evaluated on the validation set after training using
+                every candidate threshold. When <code>false</code>, no sweep is performed and
+                <code>checkpoint_threshold</code> is used.</td>
+            </tr>
+            <tr>
+              <td><code>sweeping_thresholds</code></td>
+              <td>List of candidate probability thresholds. The list can contain any number of values in the open
+                interval (0, 1). The threshold with the highest mean validation Dice is selected.</td>
+            </tr>
+          </table>
+
+          <h3>optim</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>Optimizer. Supported: <code>adam</code>, <code>adamw</code> (default), <code>sgd</code>.</td>
+            </tr>
+            <tr>
+              <td><code>lr</code></td>
+              <td>Initial learning rate.</td>
+            </tr>
+            <tr>
+              <td><code>weight_decay</code></td>
+              <td>L2 regularisation. Bias and normalisation parameters are automatically excluded.</td>
+            </tr>
+          </table>
+
+          <h3>sched</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>Scheduler. <code>none</code> keeps the LR constant. Also supports <code>cosine</code>,
+                <code>step</code>, and <code>onecycle</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><code>tmax</code></td>
+              <td>(Cosine only) Epochs over which the LR anneals from <code>lr</code> to zero.</td>
+            </tr>
+          </table>
+
+          <h3>logger</h3>
+          <table>
+            <tr>
+              <th>Field</th>
+              <th>Description</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>Logger identifier used in log output.</td>
+            </tr>
+            <tr>
+              <td><code>level</code></td>
+              <td>Logging verbosity: <code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code>.
+              </td>
+            </tr>
+          </table>
+
+          <h3>Example config</h3>
+
+          <p>The following example mirrors the current Config A structure, including the separate
+            <code>validation</code> section:</p>
+
+          <pre><code><span class="cmt"># configs/config_A.yaml</span>
 
 <span class="fn">dataset</span>:
   <span class="fn">name</span>: ciproseg_ecoli
   <span class="fn">root</span>: <span class="str">"/path/to/your_data"</span>
   <span class="fn">train_frac</span>: <span class="num">0.8</span>
-  <span class="fn">patch</span>: <span class="num">256</span>
-  <span class="fn">stride</span>: <span class="num">128</span>
+  <span class="fn">patch</span>: <span class="num">384</span>
+  <span class="fn">stride</span>: <span class="num">192</span>
 
 <span class="fn">model</span>:
   <span class="fn">name</span>: unet4
   <span class="fn">in_channels</span>: <span class="num">1</span>
   <span class="fn">out_channels</span>: <span class="num">1</span>
   <span class="fn">base_channels</span>: <span class="num">64</span>
+  <span class="fn">dropout_p</span>: <span class="num">0.0</span>
+  <span class="fn">norm</span>: batch
 
 <span class="fn">trainer</span>:
   <span class="fn">epochs</span>: <span class="num">500</span>
-  <span class="fn">batch_size</span>: <span class="num">2</span>
+  <span class="fn">batch_size</span>: <span class="num">4</span>
   <span class="fn">num_workers</span>: <span class="num">4</span>
   <span class="fn">seed</span>: <span class="num">1234</span>
-  <span class="fn">thr</span>: <span class="num">0.5</span>
-  <span class="fn">target_patches_per_epoch</span>: <span class="num">1000</span>
+  <span class="fn">target_patches_per_epoch</span>: <span class="num">1500</span>
   <span class="fn">deterministic</span>: <span class="kw">false</span>
   <span class="fn">benchmark</span>: <span class="kw">true</span>
   <span class="fn">cpu</span>: <span class="kw">false</span>
-  <span class="fn">output_dir</span>: <span class="str">"runs"</span>
+  <span class="fn">output_dir</span>: <span class="str">"runs/config_A"</span>
+  <span class="fn">amp</span>: <span class="kw">true</span>
+  <span class="fn">early_stop_patience</span>: <span class="num">100</span>
+  <span class="fn">test_tta</span>: <span class="kw">false</span>
+  <span class="fn">compute_object_metrics</span>: <span class="kw">true</span>
+
+<span class="fn">validation</span>:
+  <span class="fn">checkpoint_threshold</span>: <span class="num">0.5</span>
+  <span class="fn">threshold_sweep</span>: <span class="kw">true</span>
+  <span class="fn">sweeping_thresholds</span>: [<span class="num">0.30</span>, <span class="num">0.35</span>, <span class="num">0.40</span>, <span class="num">0.45</span>, <span class="num">0.50</span>, <span class="num">0.55</span>, <span class="num">0.60</span>]
+
+<span class="fn">loss</span>:
+  <span class="fn">name</span>: dice_bce
+  <span class="fn">dice_weight</span>: <span class="num">0.5</span>
+  <span class="fn">bce_weight</span>: <span class="num">0.5</span>
 
 <span class="fn">optim</span>:
   <span class="fn">name</span>: adamw
-  <span class="fn">lr</span>: <span class="num">1.0e-4</span>
-  <span class="fn">weight_decay</span>: <span class="num">1.0e-4</span>
+  <span class="fn">lr</span>: <span class="num">2.0e-4</span>
+  <span class="fn">weight_decay</span>: <span class="num">1.0e-2</span>
 
 <span class="fn">sched</span>:
   <span class="fn">name</span>: cosine
-  <span class="fn">tmax</span>: <span class="num">250</span>
+  <span class="fn">tmax</span>: <span class="num">500</span>
+  <span class="fn">warmup_epochs</span>: <span class="num">10</span>
 
 <span class="fn">logger</span>:
   <span class="fn">name</span>: ciproseg
   <span class="fn">level</span>: INFO</code></pre>
-</section>
+        </section>
 
-<!-- ============================== SLURM ============================== -->
-<section id="slurm">
-<h2>SLURM / HPC</h2>
+        <!-- ======================== SLURM ======================== -->
+        <section id="slurm" class="reveal">
+          <h2>SLURM / HPC</h2>
 
-<p>Job scripts for GPU and CPU-only partitions are provided in <code>scripts/</code>:</p>
+          <p>Job scripts for GPU and CPU-only partitions are provided in <code>scripts/</code>:</p>
 
-<pre><code><span class="fn">sbatch</span> scripts/slurm_gpu.sh    <span class="cmt"># GPU partition</span>
+          <pre><code><span class="fn">sbatch</span> scripts/slurm_gpu.sh    <span class="cmt"># GPU partition</span>
 <span class="fn">sbatch</span> scripts/slurm_cpu.sh    <span class="cmt"># CPU-only partition</span></code></pre>
 
-<p>Both scripts auto-detect the project root relative to the submission directory. Thread counts for CPU-bound operations (OpenMP, MKL, OpenBLAS) are set from <code>SLURM_CPUS_PER_TASK</code> automatically.</p>
+          <p>Both scripts auto-detect the project root relative to the submission directory. Thread counts for CPU-bound
+            operations (OpenMP, MKL, OpenBLAS) are set from <code>SLURM_CPUS_PER_TASK</code> automatically.</p>
 
-<p>Training output goes to <code>train.log</code> inside the timestamped run directory. SLURM's own <code>slurm-&lt;jobid&gt;.out</code> captures driver errors, OOM kills, and other system-level messages.</p>
+          <p>Training output goes to <code>train.log</code> inside the timestamped run directory. SLURM's own
+            <code>slurm-&lt;jobid&gt;.out</code> captures driver errors, OOM kills, and other system-level messages.
+          </p>
 
-<div class="callout callout-tip">
-  <div class="callout-title">Tip</div>
-  Submit from the project root or the <code>scripts/</code> directory. The scripts walk up one level if needed to find <code>configs/experiment.yaml</code>.
-</div>
-</section>
+          <div class="callout callout-tip">
+            <div class="callout-title">💡 Tip</div>
+            Submit from the project root or the <code>scripts/</code> directory. The scripts walk up one level if needed
+            to find <code>configs/experiment.yaml</code>.
+          </div>
+        </section>
 
-<!-- ============================== HOW IT WORKS ============================== -->
-<section id="how-it-works">
-<h2>How It Works</h2>
+        <!-- ======================== HOW IT WORKS ======================== -->
+        <section id="how-it-works" class="reveal">
+          <h2>How It Works</h2>
 
-<h3>Engine</h3>
-<p>The Engine orchestrates runs but contains no task logic of its own. It lazily builds the Trainer on first access, so evaluation-only workflows never touch training code. On <code>fit()</code>, it delegates to the Trainer and fires lifecycle hooks at the end.</p>
+          <h3>Engine</h3>
+          <p>The Engine orchestrates runs but contains no task logic of its own. It lazily builds the Trainer on first
+            access, so evaluation-only workflows never touch training code. On <code>fit()</code>, it delegates to the
+            Trainer and fires lifecycle hooks at the end.</p>
 
-<h3>Trainer</h3>
-<p>The Trainer owns the full LOSO loop. It builds the dataset index, creates N folds (one per series), and trains each fold sequentially. Within each fold, it constructs a fresh model, optimizer, and scheduler, then runs the training loop with periodic validation. Best checkpoints are selected by validation Dice. After all epochs are done, it loads the best weights and runs final test evaluation on the held-out series.</p>
+          <h3>Trainer</h3>
+          <p>The Trainer owns the full LOSO loop. It builds the dataset index, creates N folds (one per series), and
+            trains each fold sequentially. Within a fold, periodic validation uses
+            <code>validation.checkpoint_threshold</code> to compute the Dice score used for checkpoint selection. After
+            training finishes, the Trainer reloads <code>best.pt</code>, sweeps the configured candidate thresholds on
+            the validation set, and chooses the threshold with the highest mean validation Dice. That fixed threshold is
+            then applied once to the held-out test series. The test data do not participate in threshold selection.</p>
 
-<p>Each fold gets a deterministic seed derived from the base seed (<code>seed + 1000 * fold_id</code>), so results are reproducible even when folds run in sequence.</p>
+          <p>Each fold gets a deterministic seed derived from the base seed (<code>seed + 1000 * fold_id</code>), so
+            results are reproducible even when folds run in sequence.</p>
 
-<h3>Evaluator</h3>
-<p>The <code>evaluate_checkpoint()</code> function is fully standalone. It loads a checkpoint, rebuilds the model from the config stored inside it, identifies the held-out test series from the fold name, and runs tiled inference. No config file needed.</p>
+          <h3>Evaluator</h3>
+          <p>The <code>evaluate_checkpoint()</code> function is fully standalone. It loads a checkpoint, rebuilds the
+            model from the config stored inside it, identifies the held-out test series from the fold name, and runs
+            tiled inference. No config file needed.</p>
 
-<h3>Checkpointer</h3>
-<p>Handles atomic file writes using a temporary file followed by <code>os.replace()</code>, both for fold-level checkpoints and the run summary. JSON sidecars carry metadata without requiring <code>torch.load</code> to browse results.</p>
+          <h3>Checkpointer</h3>
+          <p>Handles atomic file writes using a temporary file followed by <code>os.replace()</code>, both for
+            fold-level checkpoints and the run summary. JSON sidecars carry metadata without requiring
+            <code>torch.load</code> to browse results.
+          </p>
 
-<h3>Tiled inference</h3>
-<p>Handles images larger than the patch size by splitting them into overlapping tiles, running each through the model, and averaging predictions in overlap regions. Tile positions are computed deterministically to ensure full coverage. Padding is applied automatically when an image or tile is smaller than the patch size.</p>
+          <h3>Tiled inference</h3>
+          <p>Handles images larger than the patch size by splitting them into overlapping tiles, running each through
+            the model, and averaging predictions in overlap regions. Tile positions are computed deterministically to
+            ensure full coverage. Padding is applied automatically when an image or tile is smaller than the patch size.
+          </p>
 
-<h3>Hook system</h3>
-<p>A lightweight lifecycle hook system fans out calls at key points: train start/end, fold start/end, epoch start/end, batch start/end, and eval start/end. The built-in <code>ProgressBar</code> hook handles all console and file logging. You can add custom hooks by subclassing <code>Hook</code> and overriding the methods you need.</p>
-</section>
+          <h3>Hook system</h3>
+          <p>A lightweight lifecycle hook system fans out calls at key points: train start/end, fold start/end, epoch
+            start/end, batch start/end, and eval start/end. The built-in <code>ProgressBar</code> hook handles all
+            console and file logging. You can add custom hooks by subclassing <code>Hook</code> and overriding the
+            methods you need.</p>
+        </section>
 
-<!-- ============================== MODELS ============================== -->
-<section id="models">
-<h2>Models</h2>
+        <!-- ======================== MODELS ======================== -->
+        <section id="models" class="reveal">
+          <h2>Models</h2>
 
-<p>CiproSeg ships with two U-Net variants, both registered through a decorator-based model registry.</p>
+          <p>CiproSeg ships with two U-Net variants, both registered through a decorator-based model registry. Having
+            multiple architectures lets you trade off between segmentation accuracy and computational efficiency choose
+            the right model for your data scale, hardware, and experimental goals.</p>
 
-<h3>UNet4 (default)</h3>
-<p>A standard 4-level encoder/decoder U-Net. Four downsampling stages with max pooling, a bottleneck, and four upsampling stages with transposed convolutions and skip connections. Each block is a double convolution (Conv2d, BatchNorm, ReLU, repeated). With <code>base_channels=64</code>, this model has roughly 31 million parameters.</p>
-<p>Requires input dimensions divisible by 16.</p>
+          <div class="model-advantages-grid reveal">
+            <div class="advantage-card">
+              <div class="advantage-icon">🎯</div>
+              <h4>Right-Sized Architecture</h4>
+              <p>Match model capacity to your dataset. Large datasets benefit from UNet4's depth; small datasets
+                converge faster with UNet2's compact design.</p>
+            </div>
+            <div class="advantage-card">
+              <div class="advantage-icon">⚡</div>
+              <h4>Rapid Prototyping</h4>
+              <p>Use UNet2 for quick debug runs and hyperparameter sweeps, then switch to UNet4 for production quality
+                with a single config change.</p>
+            </div>
+            <div class="advantage-card">
+              <div class="advantage-icon">🧠</div>
+              <h4>Hardware Flexibility</h4>
+              <p>UNet2 trains on laptops and CPU-only machines. UNet4 leverages GPU memory for higher-capacity encoding
+                across 4 resolution levels.</p>
+            </div>
+            <div class="advantage-card">
+              <div class="advantage-icon">📊</div>
+              <h4>Baseline Comparison</h4>
+              <p>Compare a lightweight vs. deep architecture on the same LOSO folds quantify exactly how much
+                additional depth improves your segmentation metrics.</p>
+            </div>
+          </div>
 
-<h3>UNet2 (lightweight)</h3>
-<p>A reduced 2-level U-Net with the same double-convolution building blocks. Significantly fewer parameters, faster to train. Useful for debugging, quick experiments, or very small datasets.</p>
-<p>Requires input dimensions divisible by 4.</p>
+        </section>
 
-<h3>Model registry</h3>
+        <!-- CINEMATIC MODEL: UNet4 -->
+        <div class="model-cinematic-wrapper" id="model-unet4-wrapper">
+          <div class="model-cinematic-sticky">
+            <img src="resources/Unet4.png" class="model-cinematic-img" id="model-unet4-img"
+              alt="UNet4 Architecture Diagram">
+            <div class="model-cinematic-overlay" id="model-unet4-overlay"></div>
+            <div class="model-cinematic-text-layer" id="model-unet4-text">
+              <div class="model-cinematic-badge">DEFAULT ARCHITECTURE</div>
+              <div class="model-cinematic-title">UNet4</div>
+              <div class="model-cinematic-desc">4-Level Encoder-Decoder Network</div>
+            </div>
+          </div>
+        </div>
 
-<p>Models are registered with the <code>@register_model</code> decorator:</p>
+        <section id="models-unet4-details" class="reveal">
+          <div class="model-detail-card">
+            <div class="model-detail-header">
+              <div class="model-detail-name">
+                <span class="model-detail-icon">🏗️</span>
+                <h3>UNet4: Full-Depth Architecture</h3>
+              </div>
+              <span class="model-tag model-tag-recommended">Recommended</span>
+            </div>
+            <p>The standard 4-level encoder-decoder U-Net is CiproSeg's default model. Four downsampling stages
+              progressively compress the spatial resolution through max pooling, while doubling the feature channels at
+              each level. A bottleneck block at the deepest level captures the most abstract contextual features before
+              the decoder reconstructs the segmentation map through four upsampling stages with transposed convolutions
+              and skip connections.</p>
+            <p>Each block applies the <strong>DoubleConv</strong> pattern (Conv2d → BatchNorm → ReLU, repeated twice) to
+              ensure stable gradient flow and rich feature extraction at every resolution. Skip connections concatenate
+              encoder features with decoder features at each level, preserving fine spatial details that would otherwise
+              be lost during downsampling.</p>
+            <div class="model-specs-grid">
+              <div class="model-spec">
+                <div class="model-spec-label">Parameters</div>
+                <div class="model-spec-value">~31M</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Depth Levels</div>
+                <div class="model-spec-value">4</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Base Channels</div>
+                <div class="model-spec-value">64</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Input Divisor</div>
+                <div class="model-spec-value">16</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Channel Progression</div>
+                <div class="model-spec-value">64 → 128 → 256 → 512 → 1024</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Best For</div>
+                <div class="model-spec-value">Production segmentation</div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-<pre><code><span class="kw">from</span> ciproseg.models.registry <span class="kw">import</span> register_model
+        <!-- CINEMATIC MODEL: UNet2 -->
+        <div class="model-cinematic-wrapper" id="model-unet2-wrapper">
+          <div class="model-cinematic-sticky">
+            <img src="resources/Unet2.png" class="model-cinematic-img" id="model-unet2-img"
+              alt="UNet2 Architecture Diagram">
+            <div class="model-cinematic-overlay" id="model-unet2-overlay"></div>
+            <div class="model-cinematic-text-layer" id="model-unet2-text">
+              <div class="model-cinematic-badge">LIGHTWEIGHT VARIANT</div>
+              <div class="model-cinematic-title">UNet2</div>
+              <div class="model-cinematic-desc">2-Level Compact Network</div>
+            </div>
+          </div>
+        </div>
+
+        <section id="models-unet2-details" class="reveal">
+          <div class="model-detail-card">
+            <div class="model-detail-header">
+              <div class="model-detail-name">
+                <span class="model-detail-icon">⚡</span>
+                <h3>UNet2: Lightweight Architecture</h3>
+              </div>
+              <span class="model-tag model-tag-fast">Fast</span>
+            </div>
+            <p>The 2-level U-Net strips the architecture down to two encoder-decoder stages with a compact bottleneck.
+              It uses the same DoubleConv building blocks as UNet4 but defaults to <code>base_channels=32</code> instead
+              of 64, resulting in an order-of-magnitude fewer parameters. The shallower network trains significantly
+              faster with lower memory requirements.</p>
+            <p>Despite its compact design, UNet2 captures sufficient spatial context for many microscopy segmentation
+              tasks, especially when cells are well-separated or the training set is small. It serves as an excellent
+              baseline for ablation studies and is ideal for iterating on augmentation strategies, sampling
+              hyperparameters, or debugging data pipeline issues before committing to a full UNet4 training run.</p>
+            <div class="model-specs-grid">
+              <div class="model-spec">
+                <div class="model-spec-label">Parameters</div>
+                <div class="model-spec-value">~111K</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Depth Levels</div>
+                <div class="model-spec-value">2</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Base Channels</div>
+                <div class="model-spec-value">32</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Input Divisor</div>
+                <div class="model-spec-value">4</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Channel Progression</div>
+                <div class="model-spec-value">32 → 64 → 128</div>
+              </div>
+              <div class="model-spec">
+                <div class="model-spec-label">Best For</div>
+                <div class="model-spec-value">Prototyping &amp; small datasets</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="models-registry" class="reveal">
+          <h3>Model registry</h3>
+
+          <p>Models are registered with the <code>@register_model</code> decorator:</p>
+
+          <pre><code><span class="kw">from</span> ciproseg.models.registry <span class="kw">import</span> register_model
 
 <span class="op">@</span><span class="fn">register_model</span>(<span class="str">"my_model"</span>)
 <span class="kw">def</span> <span class="fn">build_my_model</span>(**kwargs):
     <span class="kw">return</span> MyModel(**kwargs)</code></pre>
 
-<p>The registry is populated at import time. The <code>models/__init__.py</code> file eagerly imports all built-in model modules to ensure their decorators fire before any code tries to look up a model by name.</p>
-</section>
+          <p>The registry is populated at import time. The <code>models/__init__.py</code> file eagerly imports all
+            built-in model modules to ensure their decorators fire before any code tries to look up a model by name.</p>
+        </section>
 
-<!-- ============================== DATA PIPELINE ============================== -->
-<section id="data-pipeline">
-<h2>Data Pipeline</h2>
+        <!-- ======================== DATA PIPELINE ======================== -->
+        <section id="data-pipeline" class="reveal">
+          <h2>Data Pipeline</h2>
 
-<h3>Index building</h3>
-<p><code>build_index()</code> scans the dataset root, matches image/mask filenames, and returns a dictionary mapping series names to lists of <code>FrameItem</code> dataclass instances. It validates that every image has a corresponding mask and raises a clear error on mismatch.</p>
+          <h3>Index building</h3>
+          <p><code>build_index()</code> scans the dataset root, matches image/mask filenames, and returns a dictionary
+            mapping series names to lists of <code>FrameItem</code> dataclass instances. It validates that every image
+            has a corresponding mask and raises a clear error on mismatch.</p>
 
-<h3>Fold construction</h3>
-<p><code>make_loso_folds()</code> produces one fold per series. For each fold, <code>build_fold_splits()</code> splits the remaining series by temporal order: the first 80% of frames (by default) become training data, the last 20% become validation data. This temporal split avoids information leakage from future frames into training.</p>
+          <h3>Fold construction</h3>
+          <p><code>make_loso_folds()</code> produces one fold per series. For each fold,
+            <code>build_fold_splits()</code> splits the remaining series by temporal order: the first 80% of frames (by
+            default) become training data, the last 20% become validation data. This temporal split avoids information
+            leakage from future frames into training.
+          </p>
 
-<h3>Patch sampling</h3>
-<p>Training uses <code>RandomCropSegDataset</code>, which draws random crops from full-resolution frames on the fly. The sampling strategy is a weighted mixture of three modes:</p>
+          <h3>Patch sampling</h3>
+          <p>Training uses <code>RandomCropSegDataset</code>, which draws random crops from full-resolution frames on
+            the fly. The sampling strategy is a weighted mixture of three modes:</p>
 
-<table>
-<tr><th>Mode</th><th>Default weight</th><th>Behaviour</th></tr>
-<tr><td>Foreground</td><td>60%</td><td>Centres patches on foreground pixels</td></tr>
-<tr><td>Boundary</td><td>30%</td><td>Centres patches on morphological boundaries</td></tr>
-<tr><td>Random</td><td>10%</td><td>Uniform random placement</td></tr>
-</table>
+          <table>
+            <tr>
+              <th>Mode</th>
+              <th>Default weight</th>
+              <th>Behaviour</th>
+            </tr>
+            <tr>
+              <td>Foreground</td>
+              <td>60%</td>
+              <td>Centres patches on foreground pixels</td>
+            </tr>
+            <tr>
+              <td>Boundary</td>
+              <td>30%</td>
+              <td>Centres patches on morphological boundaries</td>
+            </tr>
+            <tr>
+              <td>Random</td>
+              <td>10%</td>
+              <td>Uniform random placement</td>
+            </tr>
+          </table>
 
-<p>The number of crops per frame per epoch is derived from <code>target_patches_per_epoch</code>, clamped between configurable bounds.</p>
+          <p>The number of crops per frame per epoch is derived from <code>target_patches_per_epoch</code>, clamped
+            between configurable bounds.</p>
 
-<h3>Augmentation</h3>
-<p>Image/mask pairs are augmented consistently with horizontal flip, vertical flip, small rotations (up to 15 degrees), brightness/contrast jitter, and Gaussian noise. All operations use OpenCV for speed.</p>
-</section>
+          <h3>Augmentation</h3>
+          <p>Image/mask pairs are augmented consistently with horizontal flip, vertical flip, small rotations (up to 15
+            degrees), brightness/contrast jitter, and Gaussian noise. All operations use OpenCV for speed.</p>
+        </section>
 
-<!-- ============================== METRICS ============================== -->
-<section id="metrics">
-<h2>Metrics</h2>
+        <!-- ======================== METRICS ======================== -->
+        <section id="metrics" class="reveal">
+          <h2>Metrics</h2>
 
-<p>CiproSeg reports four segmentation metrics, all computed from the confusion matrix after thresholding the probability map:</p>
+          <p>CiproSeg reports four segmentation metrics, all computed from the confusion matrix after thresholding the
+            probability map:</p>
 
-<table>
-<tr><th>Metric</th><th>Formula</th></tr>
-<tr><td>Dice</td><td>2TP / (2TP + FP + FN)</td></tr>
-<tr><td>IoU (Jaccard)</td><td>TP / (TP + FP + FN)</td></tr>
-<tr><td>Precision</td><td>TP / (TP + FP)</td></tr>
-<tr><td>Recall</td><td>TP / (TP + FN)</td></tr>
-</table>
+          <table>
+            <tr>
+              <th>Metric</th>
+              <th>Formula</th>
+            </tr>
+            <tr>
+              <td>Dice</td>
+              <td>2TP / (2TP + FP + FN)</td>
+            </tr>
+            <tr>
+              <td>IoU (Jaccard)</td>
+              <td>TP / (TP + FP + FN)</td>
+            </tr>
+            <tr>
+              <td>Precision</td>
+              <td>TP / (TP + FP)</td>
+            </tr>
+            <tr>
+              <td>Recall</td>
+              <td>TP / (TP + FN)</td>
+            </tr>
+          </table>
 
-<p>A small epsilon (1e-8) is added to both numerator and denominator to avoid division by zero on empty frames. Metrics are computed per frame and then averaged across all frames in the series.</p>
+          <p>A small epsilon (1e-8) is added to both numerator and denominator to avoid division by zero on empty
+            frames. Metrics are computed per frame and then averaged across all frames in the series.</p>
 
-<p>Two implementations exist: a PyTorch tensor version (used during training for quick validation) and a NumPy version (used during full-image tiled evaluation). Both produce identical results.</p>
-</section>
+          <p>Two implementations exist: a PyTorch tensor version (used during training for quick validation) and a NumPy
+            version (used during full-image tiled evaluation). Both produce identical results.</p>
 
-<!-- ============================== PROJECT STRUCTURE ============================== -->
-<section id="project-structure">
-<h2>Project Structure</h2>
+          <p>When validation threshold sweeping is enabled, all four metrics are reported for every candidate threshold,
+            but the selection criterion is fixed to <strong>mean validation Dice</strong>. Precision, recall, and IoU are
+            reported for interpretation; they do not independently choose the threshold.</p>
+        </section>
 
-<div class="tree"><b>CiproSeg/</b>
-  <b>configs/</b>
-    experiment.yaml          <span class="cmt"># experiment config (single source of truth)</span>
-  <b>docs/</b>
-    index.html               <span class="cmt"># this documentation</span>
-  <b>examples/</b>
-    train_from_python.py     <span class="cmt"># Python API usage example</span>
-  <b>notebooks/</b>
-    quickstart.ipynb         <span class="cmt"># Jupyter quickstart</span>
-  <b>scripts/</b>
-    slurm_cpu.sh             <span class="cmt"># SLURM job script (CPU)</span>
-    slurm_gpu.sh             <span class="cmt"># SLURM job script (GPU)</span>
-  <b>src/ciproseg/</b>
-    __init__.py
-    <b>cli/</b>
-      train_cli.py           <span class="cmt"># ciproseg-train entry point</span>
-      eval_cli.py            <span class="cmt"># ciproseg-eval entry point</span>
-      infer_cli.py           <span class="cmt"># ciproseg-infer entry point</span>
-    <b>core/</b>
-      engine.py              <span class="cmt"># Engine (orchestrator)</span>
-      trainer.py             <span class="cmt"># Trainer (LOSO loop)</span>
-      evaluator.py           <span class="cmt"># Evaluator + tiled inference</span>
-      infer.py               <span class="cmt"># Batch inference on image directories</span>
-      hooks.py               <span class="cmt"># Hook / HookList lifecycle system</span>
-      <b>callbacks/</b>
-        progress_bar.py      <span class="cmt"># Console + file logging</span>
-    <b>data/</b>
-      augment.py             <span class="cmt"># Augmentation + patch sampling</span>
-      collate.py             <span class="cmt"># Collate functions</span>
-      datamodules.py         <span class="cmt"># DataModule wrappers</span>
-      <b>datasets/</b>
-        ciproseg_ecoli.py    <span class="cmt"># Indexing, splits, RandomCropSegDataset</span>
-    <b>metrics/</b>
-      segmentation.py        <span class="cmt"># Dice, IoU, Precision, Recall</span>
-    <b>models/</b>
-      __init__.py            <span class="cmt"># Eager imports for registry</span>
-      registry.py            <span class="cmt"># @register_model decorator + lookup</span>
-      unet2.py               <span class="cmt"># 2-level U-Net</span>
-      unet4.py               <span class="cmt"># 4-level U-Net</span>
-    <b>optim/</b>
-      optimizers.py          <span class="cmt"># Optimizer builder (adam, adamw, sgd)</span>
-      schedulers.py          <span class="cmt"># Scheduler builder (cosine, step, onecycle)</span>
-      zero.py                <span class="cmt"># ZeRO/FSDP placeholder</span>
-    <b>utils/</b>
-      checkpoint.py          <span class="cmt"># Checkpointer (atomic saves, JSON sidecars)</span>
-      config.py              <span class="cmt"># YAML config loader + path resolver</span>
-      device.py              <span class="cmt"># Device resolution (CPU/CUDA/DDP)</span>
-      dist.py                <span class="cmt"># Distributed helpers</span>
-      io.py                  <span class="cmt"># Image/mask I/O (TIFF, PNG, JPG)</span>
-      logger.py              <span class="cmt"># Singleton logger setup</span>
-      patches.py             <span class="cmt"># Padding utilities</span>
-      seed.py                <span class="cmt"># Seed everything</span>
-    <b>visualization/</b>
-      plot_curves.py         <span class="cmt"># Training curve plotting + log parsing</span>
-  <b>tests/</b>
-    test_checkpoint.py
-    test_dataset.py
-    test_engine.py
-    test_loss.py
-    test_model.py
-  <b>tools/</b>
-    check_dataset_pairs.py   <span class="cmt"># Verify image/mask filename parity</span>
-    print_tree.py            <span class="cmt"># Print repository tree</span>
-  pyproject.toml
-  requirements.txt
-  LICENSE
-  CITATION.cff</div>
-</section>
+        <!-- ======================== PROJECT STRUCTURE ======================== -->
+        <section id="project-structure" class="reveal">
+          <h2>Project Structure</h2>
 
-<!-- ============================== EXTENDING ============================== -->
-<section id="extending">
-<h2>Extending CiproSeg</h2>
+          <div class="tree"><b>CiproSeg/</b>
+            <b>configs/</b>
+            experiment.yaml <span class="cmt"># experiment config (single source of truth)</span>
+            <b>docs/</b>
+            index.html <span class="cmt"># this documentation</span>
+            <b>examples/</b>
+            train_from_python.py <span class="cmt"># Python API usage example</span>
+            <b>notebooks/</b>
+            quickstart.ipynb <span class="cmt"># Jupyter quickstart</span>
+            <b>scripts/</b>
+            slurm_cpu.sh <span class="cmt"># SLURM job script (CPU)</span>
+            slurm_gpu.sh <span class="cmt"># SLURM job script (GPU)</span>
+            <b>src/ciproseg/</b>
+            __init__.py
+            <b>cli/</b>
+            train_cli.py <span class="cmt"># ciproseg-train entry point</span>
+            eval_cli.py <span class="cmt"># ciproseg-eval entry point</span>
+            infer_cli.py <span class="cmt"># ciproseg-infer entry point</span>
+            gui_cli.py <span class="cmt"># ciproseg-gui entry point</span>
+            <b>core/</b>
+            engine.py <span class="cmt"># Engine (orchestrator)</span>
+            trainer.py <span class="cmt"># Trainer (LOSO loop)</span>
+            evaluator.py <span class="cmt"># Evaluator + tiled inference</span>
+            infer.py <span class="cmt"># Batch inference on image directories</span>
+            hooks.py <span class="cmt"># Hook / HookList lifecycle system</span>
+            <b>callbacks/</b>
+            progress_bar.py <span class="cmt"># Console + file logging</span>
+            <b>data/</b>
+            augment.py <span class="cmt"># Augmentation + patch sampling</span>
+            collate.py <span class="cmt"># Collate functions</span>
+            datamodules.py <span class="cmt"># DataModule wrappers</span>
+            <b>datasets/</b>
+            ciproseg_ecoli.py <span class="cmt"># Indexing, splits, RandomCropSegDataset</span>
+            <b>metrics/</b>
+            segmentation.py <span class="cmt"># Dice, IoU, Precision, Recall</span>
+            <b>models/</b>
+            __init__.py <span class="cmt"># Eager imports for registry</span>
+            registry.py <span class="cmt"># @register_model decorator + lookup</span>
+            unet2.py <span class="cmt"># 2-level U-Net</span>
+            unet4.py <span class="cmt"># 4-level U-Net</span>
+            <b>optim/</b>
+            optimizers.py <span class="cmt"># Optimizer builder (adam, adamw, sgd)</span>
+            schedulers.py <span class="cmt"># Scheduler builder (cosine, step, onecycle)</span>
+            zero.py <span class="cmt"># ZeRO/FSDP placeholder</span>
+            <b>utils/</b>
+            checkpoint.py <span class="cmt"># Checkpointer (atomic saves, JSON sidecars)</span>
+            config.py <span class="cmt"># YAML config loader + path resolver</span>
+            device.py <span class="cmt"># Device resolution (CPU/CUDA/DDP)</span>
+            dist.py <span class="cmt"># Distributed helpers</span>
+            io.py <span class="cmt"># Image/mask I/O (TIFF, PNG, JPG)</span>
+            logger.py <span class="cmt"># Singleton logger setup</span>
+            patches.py <span class="cmt"># Padding utilities</span>
+            seed.py <span class="cmt"># Seed everything</span>
+            <b>visualization/</b>
+            plot_curves.py <span class="cmt"># Training curve plotting + log parsing</span>
+            <b>tests/</b>
+            test_checkpoint.py
+            test_dataset.py
+            test_engine.py
+            test_loss.py
+            test_model.py
+            <b>tools/</b>
+            check_dataset_pairs.py <span class="cmt"># Verify image/mask filename parity</span>
+            print_tree.py <span class="cmt"># Print repository tree</span>
+            pyproject.toml
+            requirements.txt
+            LICENSE
+            CITATION.cff
+          </div>
+        </section>
 
-<h3>Adding a new model</h3>
+        <!-- ======================== EXTENDING ======================== -->
+        <section id="extending" class="reveal">
+          <h2>Extending CiproSeg</h2>
 
-<p>Create a new file under <code>src/ciproseg/models/</code>, define your architecture, and register it:</p>
+          <h3>Adding a new model</h3>
 
-<pre><code><span class="cmt"># src/ciproseg/models/my_arch.py</span>
+          <p>Create a new file under <code>src/ciproseg/models/</code>, define your architecture, and register it:</p>
+
+          <pre><code><span class="cmt"># src/ciproseg/models/my_arch.py</span>
 
 <span class="kw">import</span> torch.nn <span class="kw">as</span> nn
 <span class="kw">from</span> .registry <span class="kw">import</span> register_model
@@ -1095,120 +1426,345 @@ Engine(cfg).fit()</code></pre>
 <span class="kw">def</span> <span class="fn">build_my_arch</span>(**kwargs):
     <span class="kw">return</span> MyArch(**kwargs)</code></pre>
 
-<p>Then import the module in <code>models/__init__.py</code>:</p>
+          <p>Then import the module in <code>models/__init__.py</code>:</p>
 
-<pre><code><span class="kw">from</span> . <span class="kw">import</span> my_arch <span class="kw">as</span> _my_arch</code></pre>
+          <pre><code><span class="kw">from</span> . <span class="kw">import</span> my_arch <span class="kw">as</span> _my_arch</code></pre>
 
-<p>Set <code>model.name: my_arch</code> in your config and train as usual.</p>
+          <p>Set <code>model.name: my_arch</code> in your config and train as usual.</p>
 
-<div class="callout callout-warn">
-  <div class="callout-title">Important</div>
-  The <code>@register_model</code> decorator only fires when the module is imported. If you skip the import in <code>__init__.py</code>, the model will not be found by the registry at inference time (even if it works during training, which imports through a different path).
-</div>
+          <div class="callout callout-warn">
+            <div class="callout-title">⚠️ Important</div>
+            The <code>@register_model</code> decorator only fires when the module is imported. If you skip the import in
+            <code>__init__.py</code>, the model will not be found by the registry at inference time.
+          </div>
 
-<h3>Adding a new dataset</h3>
-<p>Create a dataset class under <code>src/ciproseg/data/datasets/</code> following the same pattern as <code>ciproseg_ecoli.py</code>: a <code>build_index()</code> function that returns a dict of series to frame lists, and a <code>make_loso_folds()</code> function. Wire it into <code>build_datamodule()</code> by checking the <code>dataset.name</code> field in the config.</p>
+          <h3>Adding a new dataset</h3>
+          <p>Create a dataset class under <code>src/ciproseg/data/datasets/</code> following the same pattern as
+            <code>ciproseg_ecoli.py</code>: a <code>build_index()</code> function that returns a dict of series to frame
+            lists, and a <code>make_loso_folds()</code> function. Wire it into <code>build_datamodule()</code> by
+            checking the <code>dataset.name</code> field in the config.
+          </p>
 
-<h3>Adding custom hooks</h3>
-<p>Subclass <code>Hook</code> from <code>ciproseg.core.hooks</code> and override the lifecycle methods you need. Then pass your hook to the Engine or add it to the HookList.</p>
-</section>
+          <h3>Adding custom hooks</h3>
+          <p>Subclass <code>Hook</code> from <code>ciproseg.core.hooks</code> and override the lifecycle methods you
+            need. Then pass your hook to the Engine or add it to the HookList.</p>
+        </section>
 
-<!-- ============================== TESTING ============================== -->
-<section id="testing">
-<h2>Testing</h2>
+        <!-- ======================== TESTING ======================== -->
+        <section id="testing" class="reveal">
+          <h2>Testing</h2>
 
-<pre><code><span class="fn">pytest</span> tests/</code></pre>
+          <pre><code><span class="fn">pytest</span> tests/</code></pre>
 
-<p>The test suite covers model forward passes, dataset indexing and fold splitting, loss computation and gradients, checkpoint saving and loading, and training orchestration (via monkeypatched stubs). Tests use temporary directories and synthetic data, so no GPU or real dataset is needed.</p>
+          <p>The test suite covers model forward passes, dataset indexing and fold splitting, loss computation and
+            gradients, checkpoint saving and loading, and training orchestration (via monkeypatched stubs). Tests use
+            temporary directories and synthetic data, so no GPU or real dataset is needed.</p>
 
-<p>For static analysis:</p>
+          <p>For static analysis:</p>
 
-<pre><code><span class="fn">ruff</span> check src/
+          <pre><code><span class="fn">ruff</span> check src/
 <span class="fn">mypy</span> src/</code></pre>
-</section>
+        </section>
 
-<!-- ============================== DESIGN DECISIONS ============================== -->
-<section id="design-decisions">
-<h2>Design Decisions</h2>
+        <!-- ======================== DESIGN DECISIONS ======================== -->
+        <section id="design-decisions" class="reveal">
+          <h2>Design Decisions</h2>
 
-<h3>Single GPU only</h3>
-<p>No DDP, no torchrun, no DeepSpeed. The codebase includes basic distributed scaffolding (device resolution, rank checks, dist helpers) for possible future use, but the training loop is strictly single-GPU. This keeps the code simple, the experiments reproducible, and the debugging straightforward.</p>
+          <h3>Single GPU only</h3>
+          <p>No DDP, no torchrun, no DeepSpeed. The codebase includes basic distributed scaffolding (device resolution,
+            rank checks, dist helpers) for possible future use, but the training loop is strictly single-GPU. This keeps
+            the code simple, the experiments reproducible, and the debugging straightforward.</p>
 
-<h3>No mid-fold resume</h3>
-<p>Checkpoints are saved per fold, but training always restarts from fold 1. LOSO folds are fast enough on a single GPU that this is rarely a practical issue. The alternative (tracking fold progress, partial optimizer states, scheduler positions) would add substantial complexity for marginal benefit.</p>
+          <h3>No mid-fold resume</h3>
+          <p>Checkpoints are saved per fold, but training always restarts from fold 1. LOSO folds are fast enough on a
+            single GPU that this is rarely a practical issue.</p>
 
-<h3>Self-contained checkpoints</h3>
-<p>Every <code>.pt</code> file stores the full config alongside weights. This means you can evaluate or run inference on a checkpoint months later without needing the original config file or remembering which experiment produced it.</p>
+          <h3>Self-contained checkpoints</h3>
+          <p>Every <code>.pt</code> file stores the full config alongside weights. This means you can evaluate or run
+            inference on a checkpoint months later without needing the original config file.</p>
 
-<h3>Timestamp-based run directories</h3>
-<p>Each training run gets a unique directory based on the model name and current timestamp. Nothing is ever overwritten. If you want to compare two runs, both exist side by side on disk with their full configs and logs.</p>
+          <h3>Timestamp-based run directories</h3>
+          <p>Each training run gets a unique directory based on the model name and current timestamp. Nothing is ever
+            overwritten.</p>
 
-<h3>Temporal validation split</h3>
-<p>Within each fold, training and validation frames are split by temporal order (first 80% / last 20%) rather than randomly. This avoids information leakage from temporally adjacent frames that share similar cell configurations.</p>
+          <h3>Temporal validation split</h3>
+          <p>Within each fold, training and validation frames are split by temporal order (first 80% / last 20%) rather
+            than randomly. This avoids information leakage from temporally adjacent frames.</p>
 
-<h3>Validation frequency</h3>
-<p>Validation metrics are computed every 10 epochs rather than every epoch. This reduces overhead for large datasets while still providing enough resolution for checkpoint selection. The final epoch always triggers a validation pass regardless of the schedule.</p>
-</section>
+          <h3>Validation frequency</h3>
+          <p>Validation metrics are computed every 10 epochs rather than every epoch. This reduces overhead for large
+            datasets while still providing enough resolution for checkpoint selection. The final epoch always triggers a
+            validation pass.</p>
 
-<!-- ============================== CITATION ============================== -->
-<section id="citation">
-<h2>Citation</h2>
+          <h3>Separate checkpoint and final thresholds</h3>
+          <p><code>validation.checkpoint_threshold</code> provides a stable threshold for comparing checkpoints during
+            training. The final binarisation threshold is selected only after training by sweeping the configured
+            candidates on the validation set. Keeping these roles separate makes the procedure explicit and prevents the
+            held-out test series from influencing threshold choice.</p>
 
-<p>If you use CiproSeg in your research, please cite:</p>
+          <h3>Decoupled GUI</h3>
+          <p>The web interface is entirely optional and calls the CLI tools as subprocesses. If the GUI is not
+            installed, corrupted, or otherwise unavailable, all core functionality works from the command line exactly
+            as documented above.</p>
+        </section>
 
-<pre><code><span class="fn">@software</span>{ciproseg2026,
-  title   = {CiproSeg: LOSO U-Net Segmentation Framework},
-  author  = {Kaleel, Manaz},
-  year    = {<span class="num">2026</span>},
-  url     = {https://github.com/manazucd/CiproSeg},
-  license = {Apache-2.0}
-}</code></pre>
+        <!-- ======================== CITATION ======================== -->
+        <section id="citation" class="reveal">
+          <h2>Citation</h2>
 
-<p>A <code>CITATION.cff</code> file is included in the repository for automated citation tools.</p>
+          <p>If you use CiproSeg in your research, please cite:</p>
 
-<h3>License</h3>
-<p>CiproSeg is released under the <a href="https://github.com/manazucd/CiproSeg/blob/main/LICENSE">Apache License 2.0</a>.</p>
-</section>
+          <pre><code><span class="fn">@software</span>{ciproseg2026,
+            title   = {CiproSeg: LOSO U-Net Segmentation Framework},
+            author  = {Kaleel, Manaz},
+            year    = {<span class="num">2026</span>},
+            url     = {https://github.com/manazucd/CiproSeg},
+            license = {Apache-2.0}
+          }</code></pre>
 
-</div><!-- .content-inner -->
-</main>
+          <p>A <code>CITATION.cff</code> file is included in the repository for automated citation tools.</p>
 
-<footer class="site-footer">
-  <p>CiproSeg v0.1.0 &middot; Built by Manaz Kaleel &middot; <a href="https://github.com/manazucd/CiproSeg">github.com/manazucd/CiproSeg</a></p>
-</footer>
+          <h3>License</h3>
+          <p>CiproSeg is released under the <a href="https://github.com/manazucd/CiproSeg/blob/main/LICENSE">Apache
+              License 2.0</a>.</p>
+        </section>
 
-<!-- Sidebar active link tracking -->
-<script>
-(function() {
-  var links = document.querySelectorAll('.sidebar .nav-link');
-  var sections = [];
-  links.forEach(function(a) {
-    var id = a.getAttribute('href');
-    if (id && id.charAt(0) === '#') {
-      var el = document.getElementById(id.slice(1));
-      if (el) sections.push({ el: el, link: a });
-    }
-  });
-  function update() {
-    var scrollY = window.scrollY + 100;
-    var current = null;
-    for (var i = 0; i < sections.length; i++) {
-      if (sections[i].el.offsetTop <= scrollY) current = sections[i];
-    }
-    links.forEach(function(a) { a.classList.remove('active'); });
-    if (current) current.link.classList.add('active');
-  }
-  window.addEventListener('scroll', update, { passive: true });
-  update();
+        <!-- ======================== ACKNOWLEDGEMENTS ======================== -->
+        <section id="acknowledgements" class="reveal">
+          <h2>Acknowledgements</h2>
 
-  // Close sidebar on mobile when a link is clicked
-  links.forEach(function(a) {
-    a.addEventListener('click', function() {
-      document.querySelector('.sidebar').classList.remove('open');
-    });
-  });
-})();
-</script>
+          <p>The computational experiments in this work were performed on the high-performance computing cluster at
+            <a href="https://su-hpc-tutorials.readthedocs.io/en/latest/" target="_blank" rel="noopener">Sabanci
+              University Information Center, Istanbul, Turkey</a>. We gratefully acknowledge the computing resources
+            and technical support provided by the Sabanci University HPC team.</p>
+        </section>
+
+      </div><!-- .content-inner -->
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>CiproSeg v0.1.0 · Built by Manaz Kaleel</p>
+        <p><a href="https://github.com/manazucd/CiproSeg">github.com/manazucd/CiproSeg</a></p>
+      </div>
+    </footer>
+
+  </div><!-- /#doc-content -->
+
+  <!-- Scripts -->
+  <script>
+    (function () {
+      // Sidebar toggle
+      var toggle = document.getElementById('menu-toggle');
+      var sidebar = document.getElementById('sidebar');
+      var overlay = document.getElementById('sidebar-overlay');
+
+      toggle.addEventListener('click', function () {
+        sidebar.classList.toggle('open');
+      });
+      overlay.addEventListener('click', function () {
+        sidebar.classList.remove('open');
+      });
+
+      // Active link tracking
+      var links = document.querySelectorAll('.sidebar .nav-link');
+      var sections = [];
+      links.forEach(function (a) {
+        var id = a.getAttribute('href');
+        if (id && id.charAt(0) === '#') {
+          var el = document.getElementById(id.slice(1));
+          if (el) sections.push({ el: el, link: a });
+        }
+      });
+
+      function updateActive() {
+        var scrollY = window.scrollY + 120;
+        var current = null;
+        for (var i = 0; i < sections.length; i++) {
+          if (sections[i].el.offsetTop <= scrollY) current = sections[i];
+        }
+        links.forEach(function (a) { a.classList.remove('active'); });
+        if (current) current.link.classList.add('active');
+      }
+      window.addEventListener('scroll', updateActive, { passive: true });
+      updateActive();
+
+      // Close sidebar on mobile link click
+      links.forEach(function (a) {
+        a.addEventListener('click', function () {
+          sidebar.classList.remove('open');
+        });
+      });
+
+      // Scroll-reveal animation
+      var revealEls = document.querySelectorAll('.reveal');
+      var revealObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+      revealEls.forEach(function (el) {
+        revealObserver.observe(el);
+      });
+
+      // Stagger children animation for feature cards
+      var featureCards = document.querySelectorAll('.feature-card');
+      featureCards.forEach(function (card, i) {
+        card.style.transitionDelay = (i * 0.1) + 's';
+      });
+
+      // Cinematic scroll animation & Header appearance
+      var cinematicWrapper = document.getElementById('cinematic-wrapper');
+      var imgUnseg = document.getElementById('img-unseg');
+      var imgSeg = document.getElementById('img-seg');
+      var cinematicText = document.getElementById('cinematic-text');
+      var scrollInd = document.getElementById('scroll-ind');
+      var header = document.querySelector('.site-header');
+      var sidebar = document.querySelector('.sidebar');
+
+      window.addEventListener('scroll', function () {
+        var scrollY = window.scrollY;
+
+        // Background color of header transitions on normal pages,
+        // but here we override opacity/transform.
+        if (scrollY > 20) {
+          header.style.background = 'rgba(10, 14, 23, 0.95)';
+          header.style.borderBottomColor = 'rgba(0, 212, 170, 0.1)';
+        } else {
+          header.style.background = 'rgba(10, 14, 23, 0.8)';
+          header.style.borderBottomColor = 'rgba(255,255,255,0.06)';
+        }
+
+        if (cinematicWrapper) {
+          // Calculate progress of the 300vh cinematic scroll
+          var cinematicHeight = cinematicWrapper.offsetHeight - window.innerHeight;
+          var progress = Math.max(0, Math.min(1, scrollY / cinematicHeight));
+
+          // Phase 1: 0 to 0.4 (Zoom in unseg & fade text)
+          if (progress < 0.4) {
+            var subProgress = progress / 0.4;
+            imgUnseg.style.transform = 'translate(-50%, -50%) scale(' + (1 + subProgress * 0.15) + ')';
+            cinematicText.style.opacity = 1 - subProgress * 2;
+            cinematicText.style.transform = 'translateY(' + (subProgress * -50) + 'px)';
+            scrollInd.style.opacity = 1 - subProgress;
+            imgSeg.style.opacity = 0;
+          }
+          // Phase 2: 0.4 to 0.8 (Fade in seg & continue zoom)
+          else if (progress >= 0.4 && progress < 0.8) {
+            var subProgress = (progress - 0.4) / 0.4;
+            imgUnseg.style.transform = 'translate(-50%, -50%) scale(' + (1.15 + subProgress * 0.05) + ')';
+            imgSeg.style.transform = 'translate(-50%, -50%) scale(' + (1.15 + subProgress * 0.05) + ')';
+            imgSeg.style.opacity = subProgress;
+            cinematicText.style.opacity = 0;
+          }
+          // Phase 3: 0.8 to 1.0 (Hold seg)
+          else {
+            var subProgress = (progress - 0.8) / 0.2;
+            imgSeg.style.opacity = 1;
+            imgSeg.style.transform = 'translate(-50%, -50%) scale(' + (1.2 + subProgress * 0.05) + ')';
+            imgUnseg.style.transform = 'translate(-50%, -50%) scale(' + (1.2 + subProgress * 0.05) + ')';
+          }
+
+          // Show/hide regular document navigation
+          if (scrollY > cinematicHeight * 0.9) {
+            header.style.opacity = 1;
+            header.style.pointerEvents = 'auto';
+            header.style.transform = 'translateY(0)';
+
+            if (window.innerWidth > 900) {
+              sidebar.style.opacity = 1;
+              sidebar.style.pointerEvents = 'auto';
+              sidebar.style.transform = 'translateX(0)';
+            } else {
+              sidebar.style.opacity = 1;
+              sidebar.style.pointerEvents = 'auto';
+            }
+          } else {
+            header.style.opacity = 0;
+            header.style.pointerEvents = 'none';
+            header.style.transform = 'translateY(-20px)';
+
+            if (window.innerWidth > 900) {
+              sidebar.style.opacity = 0;
+              sidebar.style.pointerEvents = 'none';
+              sidebar.style.transform = 'translateX(-20px)';
+            } else {
+              if (!sidebar.classList.contains('open')) {
+                sidebar.style.opacity = 0;
+                sidebar.style.pointerEvents = 'none';
+              }
+            }
+          }
+        }
+      }, { passive: true });
+
+      // ---- MODEL CINEMATIC SCROLL ANIMATIONS ----
+      function animateModelCinematic(wrapperId, imgId, textId, overlayId) {
+        var wrapper = document.getElementById(wrapperId);
+        var img = document.getElementById(imgId);
+        var textLayer = document.getElementById(textId);
+        var overlay = document.getElementById(overlayId);
+        if (!wrapper || !img || !textLayer) return;
+
+        window.addEventListener('scroll', function () {
+          var rect = wrapper.getBoundingClientRect();
+          var wrapperHeight = wrapper.offsetHeight;
+          var viewH = window.innerHeight;
+
+          // Only animate when wrapper is in/near viewport
+          if (rect.bottom < -viewH || rect.top > viewH * 2) return;
+
+          // Progress: 0 when wrapper top hits viewport bottom, 1 when wrapper bottom hits viewport top
+          var totalScroll = wrapperHeight - viewH;
+          var scrolled = -rect.top;
+          var progress = Math.max(0, Math.min(1, scrolled / totalScroll));
+
+          // Phase 1: 0 to 0.3 - Image enters dark, text fades in
+          if (progress < 0.3) {
+            var sub = progress / 0.3;
+            img.style.transform = 'translate(-50%, -50%) scale(' + (1 + sub * 0.08) + ')';
+            img.style.filter = 'brightness(' + (0.3 + sub * 0.5) + ')';
+            textLayer.style.opacity = sub;
+            textLayer.style.transform = 'translateY(' + (30 - sub * 30) + 'px)';
+            if (overlay) overlay.style.opacity = 1 - sub * 0.3;
+          }
+          // Phase 2: 0.3 to 0.7 - Full image reveal, text stays, slow zoom
+          else if (progress < 0.7) {
+            var sub = (progress - 0.3) / 0.4;
+            img.style.transform = 'translate(-50%, -50%) scale(' + (1.08 + sub * 0.07) + ')';
+            img.style.filter = 'brightness(' + (0.8 + sub * 0.2) + ')';
+            textLayer.style.opacity = 1;
+            textLayer.style.transform = 'translateY(0)';
+            if (overlay) overlay.style.opacity = 0.7 - sub * 0.4;
+          }
+          // Phase 3: 0.7 to 1.0 - Text fades out, image stays bright
+          else {
+            var sub = (progress - 0.7) / 0.3;
+            img.style.transform = 'translate(-50%, -50%) scale(' + (1.15 + sub * 0.05) + ')';
+            img.style.filter = 'brightness(' + (1.0 - sub * 0.3) + ')';
+            textLayer.style.opacity = 1 - sub;
+            textLayer.style.transform = 'translateY(' + (-sub * 40) + 'px)';
+            if (overlay) overlay.style.opacity = 0.3 + sub * 0.5;
+          }
+        }, { passive: true });
+      }
+
+      animateModelCinematic('model-unet4-wrapper', 'model-unet4-img', 'model-unet4-text', 'model-unet4-overlay');
+      animateModelCinematic('model-unet2-wrapper', 'model-unet2-img', 'model-unet2-text', 'model-unet2-overlay');
+
+      // Stagger advantage cards
+      var advantageCards = document.querySelectorAll('.advantage-card');
+      advantageCards.forEach(function (card, i) {
+        card.style.transitionDelay = (i * 0.1) + 's';
+      });
+
+    })();
+  </script>
 
 </body>
+
 </html>
