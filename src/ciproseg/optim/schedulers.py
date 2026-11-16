@@ -26,7 +26,7 @@ import torch
 @dataclass(frozen=True)
 class SchedulerBundle:
     scheduler: torch.optim.lr_scheduler._LRScheduler
-    interval: str  # "step" or "epoch"
+    interval: str 
 
 
 def build_scheduler(
@@ -40,10 +40,10 @@ def build_scheduler(
     Builds a scheduler from config. Supported names: cosine, step, onecycle.
 
         sched:
-            name: cosine       # or step / onecycle
+            name: cosine      
             tmax: 40
             eta_min: 0.0
-            warmup_epochs: 10  # optional linear warmup (cosine and step only)
+            warmup_epochs: 10  
     """
     scfg = cfg.get("sched") or {}
     name = str(scfg.get("name", "none")).lower()

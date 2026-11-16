@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2026-04-11
-#  Last modified : 2026-10-03, MK
+#  Last modified : 2026-11-16, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -47,9 +47,6 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("ciproseg.gui")
 
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
 app = FastAPI(title="CiproSeg GUI", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -60,17 +57,14 @@ app.add_middleware(
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
-# ---------------------------------------------------------------------------
-# Global mutable state for the single active job (train / eval / infer)
-# ---------------------------------------------------------------------------
 _job_lock = threading.Lock()
 _active_job: Dict[str, Any] = {
-    "process": None,       # subprocess.Popen
-    "kind": None,          # "train" | "eval" | "infer"
-    "log_path": None,      # path to captured stdout log
-    "started_at": None,    # ISO timestamp
-    "config": None,        # dict of the resolved config
-    "status": "idle",      # "idle" | "running" | "done" | "failed" | "stopped"
+    "process": None,       
+    "kind": None,          
+    "log_path": None,      
+    "started_at": None,    
+    "config": None,        
+    "status": "idle",      
 }
 
 
@@ -82,9 +76,6 @@ def _resolve_runs_root(root: Optional[str]) -> Path:
     return Path.cwd() / "runs"
 
 
-# ---------------------------------------------------------------------------
-# Serve frontend
-# ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     index = _STATIC_DIR / "index.html"
@@ -93,9 +84,6 @@ async def serve_index():
     return HTMLResponse(index.read_text(encoding="utf-8"))
 
 
-# ---------------------------------------------------------------------------
-# Environment info
-# ---------------------------------------------------------------------------
 @app.get("/api/env")
 async def get_env():
     info: Dict[str, str] = {
@@ -118,9 +106,6 @@ async def get_env():
     return info
 
 
-# ---------------------------------------------------------------------------
-# Runs browser
-# ---------------------------------------------------------------------------
 def _scan_runs(root: Path) -> List[Dict[str, Any]]:
     """Walk runs/<model>/<timestamp>/ and collect metadata."""
     results: List[Dict[str, Any]] = []
@@ -139,7 +124,7 @@ def _scan_runs(root: Path) -> List[Dict[str, Any]]:
                 "path": str(ts_dir),
                 "folds": [],
             }
-            # Read run summary if present
+
             summary_json = ts_dir / "run_summary.json"
             if summary_json.exists():
                 try:
@@ -147,7 +132,6 @@ def _scan_runs(root: Path) -> List[Dict[str, Any]]:
                 except Exception:
                     pass
 
-            # Read config
             cfg_yaml = ts_dir / "config_resolved.yaml"
             if cfg_yaml.exists():
                 try:
@@ -155,7 +139,6 @@ def _scan_runs(root: Path) -> List[Dict[str, Any]]:
                 except Exception:
                     pass
 
-            # Scan fold directories
             for fold_dir in sorted(ts_dir.iterdir()):
                 if not fold_dir.is_dir() or not fold_dir.name.startswith("fold_"):
                     continue
@@ -172,7 +155,6 @@ def _scan_runs(root: Path) -> List[Dict[str, Any]]:
                         fold_info["last"] = json.loads(last_json.read_text("utf-8"))
                     except Exception:
                         pass
-                # Check for plot images
                 fold_info["has_loss_plot"] = (fold_dir / "loss.png").exists()
                 fold_info["has_dice_plot"] = (fold_dir / "dice.png").exists()
                 entry["folds"].append(fold_info)
@@ -227,9 +209,6 @@ async def get_run_detail(model: str, timestamp: str, root: Optional[str] = Query
     return detail
 
 
-# ---------------------------------------------------------------------------
-# Serve images / files from the filesystem (constrained to safe roots)
-# ---------------------------------------------------------------------------
 _SAFE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".svg", ".json", ".yaml", ".yml"}
 
 
@@ -244,9 +223,6 @@ async def serve_file(path: str = Query(...)):
     return FileResponse(str(p))
 
 
-# ---------------------------------------------------------------------------
-# Inference image listing
-# ---------------------------------------------------------------------------
 _INFER_SUFFIXES = ("_prob.png", "_binary.png", "_pred_overlay.png", "_gt_overlay.png", "_diff.png")
 
 
@@ -281,7 +257,6 @@ async def list_infer_images(dir: str = Query(...)):
     resolved = str(Path(dir).resolve())
     images = _group_inference_outputs(resolved)
     if not images:
-        # Return diagnostic info so the frontend can show a helpful message
         p = Path(resolved)
         exists = p.exists()
         is_dir = p.is_dir()
@@ -323,10 +298,6 @@ async def get_training_plots(run_dir: str = Query(...)):
             plots.append(entry)
     return {"plots": plots}
 
-
-# ---------------------------------------------------------------------------
-# Training / Eval / Infer job management
-# ---------------------------------------------------------------------------
 class TrainRequest(BaseModel):
     config_path: Optional[str] = None
     config_dict: Optional[Dict[str, Any]] = None
@@ -364,10 +335,6 @@ def _launch_subprocess(cmd: List[str], kind: str, cfg: Optional[Dict] = None) ->
         log_fd, log_path = tempfile.mkstemp(prefix=f"ciproseg_{kind}_", suffix=".log")
         log_file = os.fdopen(log_fd, "w")
 
-        # Force matplotlib to use the non-interactive Agg backend in the
-        # child process. Without this, matplotlib may initialise TkAgg when
-        # a DISPLAY is set, and tkinter then crashes inside DataLoader
-        # worker processes ("main thread is not in main loop").
         child_env = {**os.environ, "MPLBACKEND": "Agg"}
 
         try:
@@ -393,7 +360,6 @@ def _launch_subprocess(cmd: List[str], kind: str, cfg: Optional[Dict] = None) ->
             "status": "running",
         })
 
-    # Monitor in background
     def _monitor():
         process.wait()
         log_file.close()
@@ -449,8 +415,6 @@ async def start_eval(req: EvalRequest):
 
 @app.post("/api/infer")
 async def start_infer(req: InferRequest):
-    # Compute the actual output directory using the same logic as infer_cli.py
-    # Always resolve to an absolute path so the viewer can find it later
     if req.output_dir:
         resolved_output = str(Path(req.output_dir).resolve())
     else:
@@ -528,11 +492,6 @@ async def stop_job():
             raise HTTPException(500, f"Failed to stop: {e}")
     return {"status": "stopped"}
 
-
-# ---------------------------------------------------------------------------
-# Config helpers
-# ---------------------------------------------------------------------------
-# Search paths for the default config file (checked in order)
 _CONFIG_SEARCH_PATHS = [
     Path("configs/experiment.yaml"),
     Path("configs/config_default.yaml"),
@@ -631,9 +590,6 @@ async def validate_config(cfg: Dict[str, Any]):
     return {"valid": len(errors) == 0, "errors": errors}
 
 
-# ---------------------------------------------------------------------------
-# Launch helper
-# ---------------------------------------------------------------------------
 def find_free_port(host: str, start: int, max_attempts: int = 20) -> int:
     """Find the first free port starting from `start`, trying up to `max_attempts` ports."""
     import socket
@@ -655,7 +611,6 @@ def run_server(host: str = "127.0.0.1", port: int = 7860, open_browser: bool = T
     """Start the Uvicorn server. Called by the ciproseg-gui CLI."""
     import uvicorn
 
-    # Find the first available port starting from the requested one
     actual_port = find_free_port(host, port)
     if actual_port != port:
         logger.info(f"Port {port} in use, using {actual_port} instead.")

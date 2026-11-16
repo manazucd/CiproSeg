@@ -474,3 +474,7 @@ If you use CiproSeg in your work, please cite:
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) for details.
+
+## AI assistance
+
+This README is created with the assistence of Claude (Anthropic). The authors reviewed and edited them and take responsibility for their content. Parts of the code were written with Claude; the authors reviewed and tested all of it.

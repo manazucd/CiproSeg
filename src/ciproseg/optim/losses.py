@@ -161,7 +161,7 @@ class FocalTverskyLoss(nn.Module):
         tversky_index = (tp + self.smooth) / (
             tp + self.alpha * fp + self.beta * fn + self.smooth
         )
-        # Clamp to avoid pow(0, gamma) numerical issues during early training.
+
         return torch.pow(torch.clamp(1.0 - tversky_index, min=1e-7), self.gamma)
 
 

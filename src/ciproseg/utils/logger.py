@@ -33,7 +33,6 @@ def _lcfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ddp_env_present() -> bool:
-    # Detects torchrun/DDP launches before dist is initialised, used to guard file logging.
     return "RANK" in os.environ or "WORLD_SIZE" in os.environ
 
 
@@ -56,7 +55,7 @@ def setup_logging(cfg: Dict[str, Any]) -> None:
 
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    logger.propagate = False  # prevent double logging via root logger
+    logger.propagate = False 
 
     if getattr(logger, "_ciproseg_configured", False):
         _LOGGER = logger

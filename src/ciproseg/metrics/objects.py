@@ -36,12 +36,7 @@ from typing import Dict, Tuple
 import cv2
 import numpy as np
 
-
-# Connectivity used for connected component labelling (8-connected).
 _CC_CONNECTIVITY = 8
-
-# Minimum component area (pixels) to keep. Smaller components are
-# usually segmentation noise rather than real cells.
 _DEFAULT_MIN_AREA = 16
 
 
@@ -93,7 +88,6 @@ def label_components(mask01: np.ndarray, min_area: int = _DEFAULT_MIN_AREA) -> T
         bin_u8, connectivity=_CC_CONNECTIVITY
     )
 
-    # Component 0 is background; iterate over 1..n_total - 1.
     keep_mapping = np.zeros(n_total, dtype=np.int32)
     next_label = 1
     for cid in range(1, n_total):
@@ -119,9 +113,6 @@ def _build_overlap_matrix(
     if n_gt == 0 or n_pred == 0:
         return np.zeros((n_gt + 1, n_pred + 1), dtype=np.int64)
 
-    # bincount on the joint (gt, pred) pair index. The encoding is
-    # gt_label * (n_pred + 1) + pred_label, which is unique for every
-    # valid (gt, pred) combination.
     flat_idx = (
         gt_labels.astype(np.int64) * (n_pred + 1)
         + pred_labels.astype(np.int64)
@@ -174,27 +165,20 @@ def compute_object_metrics(
         return ObjectMetrics(n_gt, 0, 0, 0, n_gt, 0, 0, 0.0, 0.0, 0.0)
 
     overlap = _build_overlap_matrix(gt_labels, pred_labels, n_gt, n_pred)
-    overlap_inner = overlap[1:, 1:]  # drop background row/col
+    overlap_inner = overlap[1:, 1:]  
 
-    # Areas of each component (sum over the other axis on the full matrix).
     gt_areas = overlap[1:, :].sum(axis=1)
     pred_areas = overlap[:, 1:].sum(axis=0)
 
-    # Pairwise IoU matrix, shape (n_gt, n_pred).
     union = (
         gt_areas[:, None] + pred_areas[None, :] - overlap_inner
     ).astype(np.float64)
     iou = np.where(union > 0, overlap_inner.astype(np.float64) / union, 0.0)
 
-    # A pred is matched to a gt if IoU >= threshold. Counts of valid
-    # matches per gt and per pred drive splits/merges.
     matched = iou >= iou_threshold
     matches_per_gt = matched.sum(axis=1)
     matches_per_pred = matched.sum(axis=0)
 
-    # TP is the number of matched gt-pred pairs. To avoid double counting
-    # in the presence of splits/merges, count unique gts that have at
-    # least one match (the standard convention).
     tp = int((matches_per_gt > 0).sum())
     fn = int((matches_per_gt == 0).sum())
     fp = int((matches_per_pred == 0).sum())

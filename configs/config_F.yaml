@@ -1,11 +1,3 @@
-# -----------------------------------------------------------------------
-#  Config F -- Dice+BCE on the patch=256 baseline
-#
-#  Goal: test combo loss without the patch=384 confound.
-#  Changes from original baseline: dice_bce loss, 10-epoch warmup.
-#  Everything else matches the baseline that hit val_dice=0.8973.
-# -----------------------------------------------------------------------
-
 dataset:
   name: ciproseg_ecoli
   root: "/cta/users/miray.palaz/CiproSeg/dataset_18-03-2026"

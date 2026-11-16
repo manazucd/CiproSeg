@@ -42,7 +42,6 @@ class FoldCurves:
 
 _METRIC_PATTERN = re.compile(r"(?P<key>[a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?P<val>[-+0-9.eE]+)")
 
-# Support both "Epoch 12" (old) and "ep 012" (current ProgressBar format).
 _EPOCH_PATTERNS = (
     re.compile(r"\bEpoch\s+(?P<epoch>\d+)\b", re.IGNORECASE),
     re.compile(r"\bep\s+(?P<epoch>\d+)\b", re.IGNORECASE),
@@ -79,10 +78,10 @@ def parse_epoch_from_line(line: str) -> Optional[int]:
 def parse_fold_from_line(line: str) -> Optional[str]:
     """Extracts fold name from common log line patterns (bracket prefix, 'Fold:' label, PB pipe format, inline token)."""
     for pat in (
-        r"\[(fold\d+_test_[^\]]+)\]",                               # [fold01_test_X]
-        r"\bFold:\s*(fold\d+_test_[A-Za-z0-9_-]+)",                 # Fold: fold01_test_X
-        r"\bFold\s+\d+\s*\|\s*(fold\d+_test_[A-Za-z0-9_-]+)\b",     # Fold 01 | fold01_test_X | ...
-        r"\b(fold\d+_test_[A-Za-z0-9_-]+)\b",                       # inline token
+        r"\[(fold\d+_test_[^\]]+)\]",                              
+        r"\bFold:\s*(fold\d+_test_[A-Za-z0-9_-]+)",                 
+        r"\bFold\s+\d+\s*\|\s*(fold\d+_test_[A-Za-z0-9_-]+)\b",    
+        r"\b(fold\d+_test_[A-Za-z0-9_-]+)\b",                       
     ):
         m = re.search(pat, line)
         if m:
@@ -167,7 +166,6 @@ def _annotate_best_point(
         return
 
     if len(curve.x) != len(curve.y):
-        # Defensive: avoid confusing annotations if data malformed
         return
 
     best_idx = min(range(len(curve.y)), key=lambda i: curve.y[i]) if mode == "min" \

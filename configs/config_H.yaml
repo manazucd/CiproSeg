@@ -1,11 +1,3 @@
-# -----------------------------------------------------------------------
-#  Config H -- Tversky loss targeting FN reduction on patch=256 baseline
-#
-#  Goal: test recall-biased loss for fold_03 filamentous bacteria.
-#  alpha=0.3, beta=0.7 penalises false negatives more than false positives.
-#  Uses BN and no dropout to isolate the loss function effect.
-# -----------------------------------------------------------------------
-
 dataset:
   name: ciproseg_ecoli
   root: "/cta/users/miray.palaz/CiproSeg/dataset_18-03-2026"

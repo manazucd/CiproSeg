@@ -27,7 +27,6 @@ import cv2
 import numpy as np
 import tifffile as tiff
 
-# Suppress tifffile's noisy ImageJ metadata messages without swallowing real errors.
 _NOISY_SUBSTR = "ImageJ series metadata invalid or corrupted file"
 
 

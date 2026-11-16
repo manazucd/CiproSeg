@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-10-03, MK
+#  Last modified : 2026-11-16, MK
 #  Version       : 0.1.2
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -38,20 +38,8 @@ from ..utils.logger import get_logger
 from .hooks import HookList
 
 
-
-
-# Mask binarisation threshold. Project convention: mask pixel values in
-# 1..50 are treated as background (CiproSeg quirk). 128 is the safe cutoff.
 _MASK_BIN_THRESHOLD = 128
-
-# Floor for the Hann blending weights. Keeps pixels at the very edge of
-# the image (where only one tile contributes and the window value is 0)
-# from being divided by zero, without affecting interior blending.
 _HANN_MIN_WEIGHT = 1e-3
-
-# Boundary padding mode used to extend the image up to a tile-grid-aligned
-# size before tiled inference. "reflect" matches BORDER_REFLECT_101 used
-# elsewhere in the pipeline (mirrors without repeating the edge pixel).
 _BOUNDARY_PAD_MODE = "reflect"
 
 
@@ -142,7 +130,6 @@ def predict_full_mask_tiled(
     model.eval()
     h, w = img_gray01.shape
 
-    # Pad to a tile-grid-aligned size with reflection at the boundary.
     h_pad = _grid_aligned_size(h, patch, stride)
     w_pad = _grid_aligned_size(w, patch, stride)
     img_padded = np.pad(
@@ -155,9 +142,6 @@ def predict_full_mask_tiled(
     wgt = np.zeros((h_pad, w_pad), dtype=np.float32)
     window = _hann_window_2d(patch)
 
-    # After padding, every tile crop is exactly (patch, patch) and every
-    # tile position is on the regular stride grid. The Hann constant-sum
-    # property holds across the whole padded image.
     for x, y in tile_positions(h_pad, w_pad, patch, stride):
         crop = img_padded[y:y + patch, x:x + patch]
         inp = torch.from_numpy(crop.astype(np.float32)).unsqueeze(0).unsqueeze(0).to(device)
@@ -166,15 +150,8 @@ def predict_full_mask_tiled(
         acc[y:y + patch, x:x + patch] += prob * window
         wgt[y:y + patch, x:x + patch] += window
 
-    # Crop the accumulator and weight buffers back to the original image
-    # shape before the final division. Reflected boundary contributions
-    # are discarded here.
     return acc[:h, :w] / np.maximum(wgt[:h, :w], 1e-8)
 
-
-# Forward and inverse D4 group operations. Each forward op transforms
-# the input image, each inverse op transforms a probability map back to
-# the original orientation. Pairs are matched by index.
 _TTA_FORWARD = (
     lambda a: a,
     lambda a: np.fliplr(a).copy(),
@@ -400,9 +377,7 @@ def evaluate_with_object_metrics(
 
         pred_bin = (prob >= thr).astype(np.uint8)
         gt_bin = (mask >= (_MASK_BIN_THRESHOLD / 255.0)).astype(np.uint8)
-        # mask values from read_mask_01 are already in {0, 1}; the >=
-        # comparison above is a no-op safeguard for any caller passing
-        # a uint8 mask through.
+
         object_metrics_per_image.append(
             compute_object_metrics(pred_bin, gt_bin, iou_threshold=iou_threshold)
         )

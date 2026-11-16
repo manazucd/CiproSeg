@@ -10,7 +10,7 @@
 #  Authors       : Manaz Kaleel <manaz.ucd@gmail.com>
 #
 #  Created on    : 2025-11-01
-#  Last modified : 2026-10-03, MK
+#  Last modified : 2026-11-16, MK
 #  Version       : 0.1.0
 #  License       : Apache-2.0
 #  Repository    : https://github.com/manazucd/CiproSeg
@@ -53,14 +53,7 @@ from ..visualization.plot_curves import Curve, FoldCurves, plot_fold_curves
 
 
 _METRIC_KEYS = ("dice", "iou", "precision", "recall")
-
-# Validation cadence: the trainer evaluates the model every N epochs
-# rather than every epoch. Keeps wallclock cost down on long runs.
 _VAL_EVERY_N_EPOCHS = 10
-
-# Default threshold grid swept on val before running the final test.
-# Range chosen to bracket the empirically observed CiproSeg optima.
-
 
 class Trainer:
     """
@@ -115,8 +108,6 @@ class Trainer:
         self.deterministic = bool(tcfg.get("deterministic", False))
         self.benchmark = bool(tcfg.get("benchmark", True))
 
-        # New options. All default to current behaviour, so existing
-        # configs continue to run unchanged.
         self.early_stop_patience = tcfg.get("early_stop_patience", None)
         if self.early_stop_patience is not None:
             self.early_stop_patience = int(self.early_stop_patience)
@@ -269,8 +260,6 @@ class Trainer:
                 epochs=self.epochs,
             )
 
-            # AMP scaler. Disabled scaler is a cheap no-op so we always
-            # construct one and let `enabled` toggle the behaviour.
             scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
             state = {

@@ -47,7 +47,6 @@ def seed_everything(
     torch.backends.cudnn.benchmark = bool(benchmark)
 
     if deterministic:
-        # Required for CUDA matmul determinism on some configurations.
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
         try:
             torch.use_deterministic_algorithms(True)

@@ -9,7 +9,7 @@
     ╔═════════════════════════╗
     ║ Page:     index.html    ║
     ║ Created:  05.04.2026    ║
-    ║ Edited:   03.10.2026    ║
+    ║ Edited:   06.10.2026    ║
     ║ Author:   Manaz Kaleel  ║
     ╚═════════════════════════╝
 -->
@@ -33,8 +33,8 @@
   <!-- CINEMATIC HERO SCROLL -->
   <div class="cinematic-wrapper" id="cinematic-wrapper">
     <div class="cinematic-sticky">
-      <img src="resources/unsegmented_1.png" class="cinematic-img-layer cinematic-img-unseg" id="img-unseg" alt="">
-      <img src="resources/segmented_1.png" class="cinematic-img-layer cinematic-img-seg" id="img-seg" alt="">
+      <img src="resources/unsegmented.png" class="cinematic-img-layer cinematic-img-unseg" id="img-unseg" alt="">
+      <img src="resources/segmented.png" class="cinematic-img-layer cinematic-img-seg" id="img-seg" alt="">
       <div class="cinematic-text-layer" id="cinematic-text">
         <div class="cinematic-title">CiproSeg</div>
         <div class="cinematic-subtitle">Leave-One-Series-Out U-Net Segmentation Framework</div>
@@ -142,12 +142,12 @@
           <!-- Image showcase -->
           <div class="image-showcase reveal">
             <div class="showcase-card">
-              <img src="resources/unsegmented_1.png" alt="Unsegmented microscopy image"
+              <img src="resources/unsegmented.png" alt="Unsegmented microscopy image"
                 onerror="this.outerHTML='<div class=\'img-placeholder\'>unsegmented_1.png, add your image</div>'">
               <div class="showcase-label"><span class="dot dot-input"></span> Raw Microscopy Input</div>
             </div>
             <div class="showcase-card">
-              <img src="resources/segmented_1.png" alt="Segmented result"
+              <img src="resources/segmented.png" alt="Segmented result"
                 onerror="this.outerHTML='<div class=\'img-placeholder\'>segmented_1.png, add your image</div>'">
               <div class="showcase-label"><span class="dot dot-output"></span> Segmented Output</div>
             </div>
@@ -674,7 +674,7 @@ Engine(cfg).fit()</code></pre>
           <h2>Web GUI</h2>
 
           <p>CiproSeg ships with an optional browser-based interface for users who prefer not to work from the command
-            line. The GUI wraps the same CLI commands described above; it does not replace them.</p>
+            line. The GUI wraps the same CLI commands described above; it does not replace them. To launch the CiproSeg Web GUI, run the following command in a terminal:</p>
 
           <pre><code><span class="fn">ciproseg-gui</span></code></pre>
 
@@ -1544,7 +1544,7 @@ Engine(cfg).fit()</code></pre>
 
     <footer class="site-footer">
       <div class="footer-inner">
-        <p>CiproSeg v0.1.0 · Built by Manaz Kaleel</p>
+        <p>CiproSeg v0.1.0 · Built by Manaz Kaleel assisted by Claude (Anthropic) and reviewed by the authors.</p>
         <p><a href="https://github.com/manazucd/CiproSeg">github.com/manazucd/CiproSeg</a></p>
       </div>
     </footer>

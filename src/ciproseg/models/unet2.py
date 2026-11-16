@@ -22,10 +22,6 @@ import torch.nn as nn
 
 from .registry import register_model
 
-
-# Default GroupNorm group count. With LOSO and a small batch (e.g. 4)
-# BatchNorm running statistics are unreliable, so GroupNorm or
-# InstanceNorm are preferred when norm != "batch".
 _DEFAULT_GN_GROUPS = 8
 
 
@@ -121,15 +117,11 @@ class UNet2(nn.Module):
         super().__init__()
         b = base_channels
 
-        # Encoder: no dropout (preserves low and mid level features).
         self.down1, self.pool1 = DoubleConv(in_channels, b, norm=norm), nn.MaxPool2d(2)
         self.down2, self.pool2 = DoubleConv(b, b * 2, norm=norm), nn.MaxPool2d(2)
 
-        # Bottleneck: highest channel count, most prone to memorisation.
         self.bottleneck = DoubleConv(b * 2, b * 4, dropout_p=dropout_p, norm=norm)
 
-        # Decoder: dropout applied here to fight overfitting on the
-        # task-specific reconstruction path.
         self.upconv2 = nn.ConvTranspose2d(b * 4, b * 2, kernel_size=2, stride=2)
         self.up2 = DoubleConv(b * 4, b * 2, dropout_p=dropout_p, norm=norm)
 

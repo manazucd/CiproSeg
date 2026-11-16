@@ -44,7 +44,6 @@ def _make(dev: torch.device, local_rank: int, world_size: int) -> DeviceInfo:
 
 
 def _resolve_explicit_device(device: str) -> torch.device:
-    # Under DDP, a bare "cuda" maps to the rank specific GPU, all other strings honoured as-is.
     if is_dist_initialized() and str(device).strip().lower() == "cuda":
         return torch.device(f"cuda:{get_local_rank()}")
     return torch.device(device)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# SPDX-License-Identifier: Apache-2.0
 # =======================================================================
 #  Project       : CiproSeg - LOSO U-Net Segmentation Framework
 #  File          : src/ciproseg/models/__init__.py

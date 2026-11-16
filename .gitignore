@@ -5,7 +5,7 @@ Data/
 
 # Predictions / outputs anywhere (optional extra safety)
 *_predictions/
-*.png
+# *.png
 
 # =========================
 # Training runs / checkpoints / logs
