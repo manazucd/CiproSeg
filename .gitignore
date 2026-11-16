@@ -1,0 +1,66 @@
+# =========================
+# Data (raw + derived)
+# =========================
+Data/
+
+# Predictions / outputs anywhere (optional extra safety)
+*_predictions/
+# *.png
+
+# =========================
+# Training runs / checkpoints / logs
+# =========================
+runs/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.log
+*.json
+
+# =========================
+# Build / packaging artifacts
+# =========================
+dist/
+build/
+*.whl
+*.tar.gz
+*.egg-info/
+src/ciproseg.egg-info/
+
+# =========================
+# Python caches
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# OS / editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# slurm files
+# =========================
+slurm-*
+
+# =========================
+# Meta data and dev files
+# =========================
+*debug*
+
+# =========================
+# Under development
+# =========================
+#gui/
+#gui_cli.py
+#README.md
+#GUI_README.md
+#docs
+#index.html
+#*.css

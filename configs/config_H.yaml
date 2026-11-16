@@ -1,0 +1,57 @@
+dataset:
+  name: ciproseg_ecoli
+  root: "/cta/users/miray.palaz/CiproSeg/dataset_18-03-2026"
+  train_frac: 0.8
+  patch: 256
+  stride: 128
+
+model:
+  name: unet4
+  in_channels: 1
+  out_channels: 1
+  base_channels: 64
+  dropout_p: 0.0
+  norm: batch
+
+trainer:
+  epochs: 500
+  batch_size: 8
+  num_workers: 4
+  seed: 1234
+  target_patches_per_epoch: 2000
+
+  deterministic: false
+  benchmark: true
+
+  cpu: false
+  output_dir: "runs/config_H"
+
+  amp: true
+  early_stop_patience: 500
+  test_tta: false
+  compute_object_metrics: true
+
+validation:
+  checkpoint_threshold: 0.5
+  threshold_sweep: true
+  sweeping_thresholds: [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]
+
+loss:
+  name: tversky
+  alpha: 0.3
+  beta: 0.7
+  smooth: 1.0
+
+optim:
+  name: adamw
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+
+sched:
+  name: cosine
+  tmax: 500
+  warmup_epochs: 10
+
+logger:
+  name: ciproseg
+  level: INFO

@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use CiproSeg, please cite it as below."
+title: "CiproSeg: A Research to Production PyTorch Framework"
+authors:
+  - family-names: Kaleel
+    given-names: Manaz
+    email: manaz.ucd@gmail.com
+  - name: 
+version: "0.1.0"
+date-released: "2025-11-01"
+repository-code: "https://github.com/manazucd/CiproSeg"
+license: Apache-2.0
